@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ADDICT — בחירות משפיעניות</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --pink:#D4537E;--pink-light:#FBEAF0;--pink-mid:#F4C0D1;
+  --dark:#2C2C2A;--muted:#888780;
+  --bg:#F8F7F5;--card:#fff;--border:#E8E6E0;
+  --text:#2C2C2A;--text2:#888780;
+  --success-bg:#EAF3DE;--success-text:#3B6D11;
+  --danger-text:#A32D2D;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);direction:rtl}
+input,button,textarea,select{font-family:inherit}
+
+/* AUTH */
+#auth-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:1.5rem}
+.auth-box{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:2.5rem;width:100%;max-width:380px;text-align:center}
+.auth-logo{font-size:24px;font-weight:600;letter-spacing:4px;color:var(--text);margin-bottom:4px}
+.auth-sub{font-size:13px;color:var(--muted);margin-bottom:2rem}
+.auth-box input{width:100%;margin-bottom:12px;padding:11px 14px;font-size:15px;border:1px solid var(--border);border-radius:10px;background:#FAFAF9;color:var(--text);outline:none;transition:border-color .15s}
+.auth-box input:focus{border-color:var(--pink)}
+.btn-primary{width:100%;padding:12px;background:var(--dark);color:#fff;border:none;border-radius:10px;font-size:15px;cursor:pointer;font-weight:500;transition:opacity .15s}
+.btn-primary:hover{opacity:.85}
+.auth-error{font-size:13px;color:var(--danger-text);margin-top:10px;min-height:20px}
+
+/* ADMIN */
+#admin-screen{padding:1.5rem;max-width:900px;margin:0 auto}
+.admin-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid var(--border)}
+.admin-title{font-size:22px;font-weight:600;letter-spacing:2px}
+.admin-badge{font-size:11px;background:#F1EFE8;color:#5F5E5A;padding:3px 10px;border-radius:20px;margin-right:8px;font-weight:400}
+.btn-sm{padding:8px 14px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:13px;cursor:pointer;color:var(--text);transition:background .15s}
+.btn-sm:hover{background:#F1EFE8}
+.section-title{font-size:15px;font-weight:500;color:var(--text);margin-bottom:1rem}
+.admin-section{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1.25rem;margin-bottom:1.25rem}
+.drop-form{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.drop-form input{flex:1;min-width:200px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:#FAFAF9;color:var(--text);outline:none;transition:border-color .15s}
+.drop-form input:focus{border-color:var(--pink)}
+.btn-pink{padding:10px 18px;background:var(--pink);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:500;white-space:nowrap;transition:opacity .15s}
+.btn-pink:hover{opacity:.88}
+.btn-pink:disabled{opacity:.5;cursor:not-allowed}
+.inf-table{width:100%;border-collapse:collapse;font-size:13px}
+.inf-table th{text-align:right;padding:8px 10px;border-bottom:1px solid var(--border);color:var(--muted);font-weight:400}
+.inf-table td{padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
+.inf-table tr:last-child td{border-bottom:none}
+.inf-table tr:hover td{background:#FAFAF9}
+.limit-input{width:65px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:center;background:#FAFAF9;color:var(--text);outline:none}
+.limit-input:focus{border-color:var(--pink)}
+.badge-done{font-size:11px;background:var(--success-bg);color:var(--success-text);padding:3px 9px;border-radius:20px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:6px}
+.dot-on{background:#9FE1CB}
+.dot-off{background:#D3D1C7}
+
+/* INFLUENCER */
+#influencer-screen{min-height:100vh;background:var(--bg)}
+.inf-header{background:var(--card);border-bottom:1px solid var(--border);padding:1rem 1.5rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+.inf-logo{font-size:18px;font-weight:600;letter-spacing:3px}
+.inf-drop-name{font-size:12px;color:var(--muted);margin-top:2px}
+.cart-btn{position:relative;padding:9px 16px;background:var(--dark);color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:opacity .15s}
+.cart-btn:hover{opacity:.85}
+.cart-badge{position:absolute;top:-7px;right:-7px;background:var(--pink);color:#fff;font-size:11px;width:19px;height:19px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600}
+.limit-bar{background:var(--card);border-bottom:1px solid var(--border);padding:.75rem 1.5rem;display:flex;align-items:center;gap:12px;font-size:13px;color:var(--muted)}
+.limit-track{flex:1;height:5px;background:#F1EFE8;border-radius:3px;overflow:hidden}
+.limit-fill{height:100%;background:var(--pink);border-radius:3px;transition:width .3s}
+.products-grid{padding:1.5rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:1.25rem}
+.product-card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;transition:border-color .2s,transform .15s}
+.product-card:hover{border-color:var(--pink-mid);transform:translateY(-2px)}
+.product-card.selected-flash{border-color:var(--pink);border-width:2px}
+.product-img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;background:#F1EFE8}
+.product-img-ph{width:100%;aspect-ratio:3/4;background:#F1EFE8;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px}
+.product-info{padding:10px 12px}
+.product-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:3px;line-height:1.4}
+.product-type{font-size:11px;color:var(--muted);margin-bottom:8px}
+.size-row{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
+.size-btn{padding:3px 9px;border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;background:transparent;color:var(--text);transition:all .1s}
+.size-btn:hover{border-color:var(--pink);color:var(--pink)}
+.size-btn.active{background:var(--pink);border-color:var(--pink);color:#fff}
+.qty-row{display:flex;align-items:center;gap:6px}
+.qty-btn{width:26px;height:26px;border:1px solid var(--border);border-radius:6px;background:transparent;cursor:pointer;font-size:16px;color:var(--text);display:flex;align-items:center;justify-content:center;transition:background .1s}
+.qty-btn:hover{background:#F1EFE8}
+.qty-num{font-size:14px;font-weight:500;min-width:20px;text-align:center}
+.add-btn{flex:1;padding:5px 8px;background:var(--pink-light);border:1px solid var(--pink-mid);border-radius:6px;font-size:12px;cursor:pointer;color:#993556;transition:background .1s}
+.add-btn:hover{background:var(--pink-mid)}
+.add-btn:disabled{opacity:.4;cursor:not-allowed}
+.in-cart-badge{display:inline-block;font-size:11px;background:var(--success-bg);color:var(--success-text);padding:2px 7px;border-radius:20px;margin-top:4px}
+
+/* CART */
+.cart-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;justify-content:flex-start}
+.cart-panel{background:var(--card);width:360px;max-width:95vw;height:100%;display:flex;flex-direction:column;border-left:1px solid var(--border);box-shadow:-4px 0 24px rgba(0,0,0,.08)}
+.cart-header{padding:1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.cart-title{font-size:16px;font-weight:500}
+.close-btn{background:none;border:none;cursor:pointer;font-size:22px;color:var(--muted);line-height:1;padding:0}
+.close-btn:hover{color:var(--text)}
+.cart-items{flex:1;overflow-y:auto;padding:1rem}
+.cart-item{padding:10px 0;border-bottom:1px solid var(--border);display:flex;gap:10px}
+.cart-item:last-child{border-bottom:none}
+.cart-item-img{width:48px;height:64px;object-fit:cover;border-radius:6px;background:#F1EFE8;flex-shrink:0}
+.cart-item-info{flex:1}
+.cart-item-name{font-size:13px;font-weight:500;margin-bottom:3px}
+.cart-item-detail{font-size:12px;color:var(--muted)}
+.cart-item-remove{background:none;border:none;cursor:pointer;color:var(--muted);font-size:18px;padding:0;line-height:1;align-self:flex-start}
+.cart-empty{text-align:center;color:var(--muted);padding:3rem;font-size:14px}
+.cart-footer{padding:1.25rem;border-top:1px solid var(--border)}
+.cart-notes{width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;resize:vertical;min-height:70px;margin-bottom:12px;background:#FAFAF9;color:var(--text);outline:none;transition:border-color .15s}
+.cart-notes:focus{border-color:var(--pink)}
+.cart-total{font-size:13px;color:var(--muted);margin-bottom:12px}
+.cart-total span{font-weight:500;color:var(--text)}
+.submit-btn{width:100%;padding:13px;background:var(--dark);color:#fff;border:none;border-radius:10px;font-size:15px;cursor:pointer;font-weight:500;transition:opacity .15s}
+.submit-btn:hover{opacity:.88}
+.submit-btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* SUCCESS */
+#success-screen{display:flex;align-items:center;justify-content:center;min-height:80vh;padding:2rem}
+.success-box{text-align:center;max-width:400px}
+.success-icon{font-size:56px;color:var(--pink);margin-bottom:1rem}
+.success-title{font-size:22px;font-weight:500;margin-bottom:.5rem}
+.success-sub{font-size:14px;color:var(--muted);line-height:1.7}
+
+/* LOADING */
+.loading-state{text-align:center;padding:4rem 2rem;color:var(--muted);font-size:14px}
+.spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--pink);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-left:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.hidden{display:none!important}
+@media(max-width:600px){
+  .products-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));padding:1rem;gap:1rem}
+  .inf-header{padding:.75rem 1rem}
+  .cart-panel{width:100vw}
+}
+</style>
+</head>
+<body>
+<div id="auth-screen">
+  <div class="auth-box">
+    <div class="auth-logo">ADDICT</div>
+    <div class="auth-sub">בחירות משפיעניות</div>
+    <input type="text" id="auth-user" placeholder="שם משתמש" autocomplete="username"/>
+    <input type="password" id="auth-pass" placeholder="סיסמה" autocomplete="current-password"/>
+    <button class="btn-primary" onclick="doLogin()">כניסה</button>
+    <div class="auth-error" id="auth-error"></div>
+  </div>
+</div>
+
+<div id="admin-screen" class="hidden">
+  <div class="admin-header">
+    <div>
+      <span class="admin-title">ADDICT</span>
+      <span class="admin-badge">פאנל ניהול</span>
+    </div>
+    <button class="btn-sm" onclick="logout()"><i class="ti ti-logout"></i> יציאה</button>
+  </div>
+
+  <div class="admin-section">
+    <div class="section-title">הגדרת דרופ פעיל</div>
+    <div class="drop-form">
+      <input type="text" id="drop-tag-input" placeholder='טאג שופיפיי — לדוגמה: דרופ נשים 11.06.26'/>
+      <input type="text" id="drop-label-input" placeholder="שם תצוגה — לדוגמה: דרופ נשים יוני 2026"/>
+      <button class="btn-pink" id="load-drop-btn" onclick="loadDrop()">
+        <i class="ti ti-download"></i> טען דרופ
+      </button>
+    </div>
+    <div id="drop-status" style="margin-top:10px;font-size:13px;color:var(--muted)"></div>
+  </div>
+
+  <div class="admin-section">
+    <div class="section-title">משפיעניות</div>
+    <table class="inf-table">
+      <thead>
+        <tr>
+          <th>שם</th>
+          <th>כניסה</th>
+          <th style="text-align:center">הגבלת פריטים</th>
+          <th style="text-align:center">סטטוס</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="inf-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="influencer-screen" class="hidden">
+  <div class="inf-header">
+    <div>
+      <div class="inf-logo">ADDICT</div>
+      <div class="inf-drop-name" id="inf-drop-label"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:13px;color:var(--muted)" id="inf-welcome"></span>
+      <button class="cart-btn" onclick="toggleCart()">
+        <i class="ti ti-shopping-bag"></i> הסל שלי
+        <span class="cart-badge" id="cart-count">0</span>
+      </button>
+      <button class="btn-sm" onclick="logout()"><i class="ti ti-logout"></i></button>
+    </div>
+  </div>
+  <div class="limit-bar" id="limit-bar">
+    <span id="limit-label"></span>
+    <div class="limit-track"><div class="limit-fill" id="limit-fill" style="width:0%"></div></div>
+    <span id="limit-nums"></span>
+  </div>
+  <div id="products-loading" class="loading-state hidden"><div class="spinner"></div> טוען מוצרים...</div>
+  <div class="products-grid hidden" id="products-grid"></div>
+  <div id="success-screen" class="hidden">
+    <div class="success-box">
+      <div class="success-icon"><i class="ti ti-circle-check"></i></div>
+      <div class="success-title">הבחירות נשלחו!</div>
+      <div class="success-sub" id="success-msg"></div>
+    </div>
+  </div>
+</div>
+
+<div class="cart-overlay hidden" id="cart-overlay" onclick="closeCartOutside(event)">
+  <div class="cart-panel">
+    <div class="cart-header">
+      <div class="cart-title">הבחירות שלי</div>
+      <button class="close-btn" onclick="toggleCart()">×</button>
+    </div>
+    <div class="cart-items" id="cart-items-list"><div class="cart-empty">הסל ריק</div></div>
+    <div class="cart-footer">
+      <div class="cart-total">סה"כ: <span id="cart-total-count">0</span> פריטים</div>
+      <textarea class="cart-notes" id="cart-notes" placeholder="הערות (אופציונלי)..."></textarea>
+      <button class="submit-btn" id="submit-btn" onclick="submitOrder()" disabled>שלחי בחירות</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const ADMIN_USER='admin',ADMIN_PASS='addict2024';
+const DEST_EMAIL='LIOR@ADDICTONLINE.CO.IL';
+
+const INFLUENCERS=[
+  {name:'ספיר בורגיל',username:'ספיר',password:'ספיר',limit:null,submitted:false},
+  {name:'עינב בובליל',username:'עינב',password:'עינב',limit:null,submitted:false},
+  {name:'נופר מור',username:'נופר',password:'נופר',limit:null,submitted:false},
+  {name:'בר כהן',username:'בר',password:'בר',limit:null,submitted:false},
+  {name:'נטעלי וקנין',username:'נטעלי',password:'נטעלי',limit:null,submitted:false},
+  {name:'שירן אביטל',username:'שירן',password:'שירן',limit:null,submitted:false},
+  {name:'אניה מרטירוסוב',username:'אניה',password:'אניה',limit:null,submitted:false},
+  {name:'ליבר בלילתי',username:'ליבר',password:'ליבר',limit:null,submitted:false},
+  {name:'דניאל עמית',username:'דניאל',password:'דניאל',limit:null,submitted:false},
+  {name:'שיר ביטון',username:'שיר',password:'שיר',limit:null,submitted:false},
+  {name:'ירדן פולק',username:'ירדן',password:'ירדן',limit:null,submitted:false},
+  {name:'מרינה בראל',username:'מרינה',password:'מרינה',limit:null,submitted:false},
+  {name:'שי נתנזון',username:'שי',password:'שי',limit:null,submitted:false},
+  {name:'דורין דותן',username:'דורין',password:'דורין',limit:null,submitted:false},
+  {name:'ניצן גריב',username:'ניצן',password:'ניצן',limit:null,submitted:false},
+];
+
+let state={currentUser:null,isAdmin:false,dropTag:'',dropLabel:'',products:[],cart:[],pState:{}};
+
+const $=id=>document.getElementById(id);
+
+function showScreen(name){
+  ['auth','admin','influencer'].forEach(s=>{
+    const el=$(s+'-screen');
+    if(el) el.classList.toggle('hidden',s!==name);
+  });
+}
+
+function doLogin(){
+  const u=$('auth-user').value.trim(),p=$('auth-pass').value.trim();
+  $('auth-error').textContent='';
+  if(u===ADMIN_USER&&p===ADMIN_PASS){
+    state.isAdmin=true;state.currentUser={name:'מנהל'};
+    showScreen('admin');renderAdminTable();return;
+  }
+  const inf=INFLUENCERS.find(i=>i.username===u&&i.password===p);
+  if(inf){
+    state.isAdmin=false;state.currentUser=inf;state.cart=[];state.pState={};
+    showScreen('influencer');
+    $('inf-welcome').textContent='שלום, '+inf.name;
+    $('inf-drop-label').textContent=state.dropLabel||'ממתין לדרופ פעיל';
+    $('success-screen').classList.add('hidden');
+    $('products-grid').classList.add('hidden');
+    if(state.products.length){
+      $('products-loading').classList.add('hidden');
+      renderProducts();
+    } else {
+      $('products-loading').classList.remove('hidden');
+      $('products-loading').innerHTML='<i class="ti ti-alert-circle"></i> אין דרופ פעיל כרגע. פני למנהלת.';
+    }
+    updateLimitBar();updateCartUI();return;
+  }
+  $('auth-error').textContent='שם משתמש או סיסמה שגויים';
+}
+
+function logout(){
+  state.currentUser=null;state.isAdmin=false;state.cart=[];
+  $('auth-user').value='';$('auth-pass').value='';$('auth-error').textContent='';
+  showScreen('auth');
+}
+
+function renderAdminTable(){
+  $('inf-tbody').innerHTML=INFLUENCERS.map((inf,i)=>`
+    <tr>
+      <td><span class="dot ${inf.submitted?'dot-on':'dot-off'}"></span>${inf.name}</td>
+      <td style="color:var(--muted);font-size:12px">${inf.username}</td>
+      <td style="text-align:center">
+        <input class="limit-input" type="number" min="1" value="${inf.limit||''}" placeholder="∞"
+          onchange="INFLUENCERS[${i}].limit=this.value?parseInt(this.value):null" title="ריק = ללא הגבלה"/>
+      </td>
+      <td style="text-align:center">
+        ${inf.submitted?'<span class="badge-done">הגישה</span>':'<span style="font-size:12px;color:var(--muted)">ממתינה</span>'}
+      </td>
+      <td></td>
+    </tr>`).join('');
+}
+
+async function loadDrop(){
+  const tag=$('drop-tag-input').value.trim(),label=$('drop-label-input').value.trim();
+  if(!tag){$('drop-status').textContent='נא להזין טאג';return;}
+  $('drop-status').innerHTML='<span class="spinner"></span> טוען מוצרים משופיפיי...';
+  $('load-drop-btn').disabled=true;
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:8000,
+        system:`You are a Shopify data extraction assistant. When given a Shopify tag, use the Shopify MCP tool to query all products with that tag. 
+Return ONLY a raw JSON array (no markdown, no explanation) in this exact format:
+[{"id":"...","title":"...","productType":"...","image":"https://...","variants":[{"id":"...","title":"...","size":"..."}]}]
+For variants: the "title" field from Shopify variants contains size/color like "XS / שחור" — split on " / " to get size and color.
+If no image available, use empty string. Include ALL products found.`,
+        messages:[{role:'user',content:`Fetch ALL Shopify products with tag: "${tag}". Return raw JSON array only.`}],
+        mcp_servers:[{type:'url',url:'https://setup.shopify.com/mcp',name:'shopify'}]
+      })
+    });
+    const data=await res.json();
+    const textBlocks=data.content?.filter(b=>b.type==='text').map(b=>b.text)||[];
+    const text=textBlocks.join('');
+    let products=[];
+    const jsonMatch=text.match(/\[[\s\S]*\]/);
+    if(jsonMatch){
+      try{products=JSON.parse(jsonMatch[0]);}catch(e){products=[];}
+    }
+    if(!products.length){
+      $('drop-status').textContent='⚠️ לא נמצאו מוצרים. בדקי שהטאג נכון.';
+      $('load-drop-btn').disabled=false;return;
+    }
+    state.dropTag=tag;state.dropLabel=label||tag;state.products=products;
+    $('drop-status').innerHTML=`<span style="color:#3B6D11">✓ נטענו ${products.length} מוצרים — דרופ פעיל: <strong>${state.dropLabel}</strong></span>`;
+    renderAdminTable();
+  }catch(e){
+    $('drop-status').textContent='שגיאה: '+e.message;
+  }
+  $('load-drop-btn').disabled=false;
+}
+
+function renderProducts(){
+  const grid=$('products-grid');
+  $('products-loading').classList.add('hidden');
+  grid.classList.remove('hidden');
+  grid.innerHTML=state.products.map((p,pi)=>{
+    const variants=p.variants||[];
+    const sizes=[...new Set(variants.map(v=>v.size||(v.title||'').split(' / ')[0]||v.title||'OS'))];
+    return `<div class="product-card" id="pc-${pi}">
+      ${p.image?`<img class="product-img" src="${p.image}" alt="${p.title}" loading="lazy"/>`:`<div class="product-img-ph"><i class="ti ti-photo"></i></div>`}
+      <div class="product-info">
+        <div class="product-name">${p.title}</div>
+        <div class="product-type">${p.productType||''}</div>
+        <div class="size-row" id="sizes-${pi}">
+          ${sizes.map(s=>`<button class="size-btn" onclick="selectSize(${pi},'${s.replace(/'/g,"\\'")}')"> ${s}</button>`).join('')}
+        </div>
+        <div class="qty-row">
+          <button class="qty-btn" onclick="changeQty(${pi},-1)">−</button>
+          <span class="qty-num" id="qty-${pi}">1</span>
+          <button class="qty-btn" onclick="changeQty(${pi},1)">+</button>
+          <button class="add-btn" id="add-${pi}" onclick="addToCart(${pi})" disabled>+ הוסיפי</button>
+        </div>
+        <div id="incart-${pi}"></div>
+      </div>
+    </div>`;
+  }).join('');
+  state.products.forEach((_,pi)=>{state.pState[pi]={size:null,qty:1};});
+}
+
+function selectSize(pi,size){
+  state.pState[pi].size=size;
+  document.querySelectorAll(`#sizes-${pi} .size-btn`).forEach(b=>{
+    b.classList.toggle('active',b.textContent.trim()===size);
+  });
+  $(`add-${pi}`).disabled=false;
+}
+
+function changeQty(pi,d){
+  state.pState[pi].qty=Math.max(1,(state.pState[pi].qty||1)+d);
+  $(`qty-${pi}`).textContent=state.pState[pi].qty;
+}
+
+function addToCart(pi){
+  const inf=state.currentUser,ps=state.pState[pi];
+  if(!ps.size)return;
+  const total=state.cart.reduce((a,c)=>a+c.qty,0);
+  if(inf.limit&&total+ps.qty>inf.limit){
+    alert(`ניתן לבחור עד ${inf.limit} פריטים בסה"כ`);return;
+  }
+  const p=state.products[pi];
+  const existing=state.cart.find(c=>c.pi===pi&&c.size===ps.size);
+  if(existing){existing.qty+=ps.qty;}
+  else{
+    state.cart.push({pi,product:p.title,productType:p.productType,size:ps.size,qty:ps.qty,image:p.image||''});
+  }
+  updateCartUI();
+  const card=$(`pc-${pi}`);
+  card.classList.add('selected-flash');
+  setTimeout(()=>card.classList.remove('selected-flash'),600);
+  const qtyInCart=state.cart.filter(c=>c.pi===pi).reduce((a,c)=>a+c.qty,0);
+  $(`incart-${pi}`).innerHTML=`<span class="in-cart-badge">בסל: ${qtyInCart}</span>`;
+}
+
+function updateCartUI(){
+  const total=state.cart.reduce((a,c)=>a+c.qty,0);
+  $('cart-count').textContent=total;
+  $('cart-total-count').textContent=total;
+  $('submit-btn').disabled=total===0;
+  updateLimitBar();renderCartItems();
+}
+
+function updateLimitBar(){
+  const inf=state.currentUser;if(!inf)return;
+  const total=state.cart.reduce((a,c)=>a+c.qty,0);
+  if(!inf.limit){
+    $('limit-label').textContent='פריטים שנבחרו:';
+    $('limit-nums').textContent=total;
+    $('limit-fill').style.width='0%';
+  } else {
+    const pct=Math.min(100,Math.round(total/inf.limit*100));
+    $('limit-label').textContent='מכסה:';
+    $('limit-nums').textContent=`${total} / ${inf.limit}`;
+    $('limit-fill').style.width=pct+'%';
+    $('limit-fill').style.background=pct>=100?'#A32D2D':'var(--pink)';
+  }
+}
+
+function renderCartItems(){
+  const list=$('cart-items-list');
+  if(!state.cart.length){list.innerHTML='<div class="cart-empty">הסל ריק</div>';return;}
+  list.innerHTML=state.cart.map((c,i)=>`
+    <div class="cart-item">
+      ${c.image?`<img class="cart-item-img" src="${c.image}" alt="${c.product}"/>`:`<div class="cart-item-img"></div>`}
+      <div class="cart-item-info">
+        <div class="cart-item-name">${c.product}</div>
+        <div class="cart-item-detail">מידה: ${c.size} · כמות: ${c.qty}</div>
+      </div>
+      <button class="cart-item-remove" onclick="removeItem(${i})">×</button>
+    </div>`).join('');
+}
+
+function removeItem(i){
+  const pi=state.cart[i].pi;
+  state.cart.splice(i,1);
+  updateCartUI();
+  const qtyInCart=state.cart.filter(c=>c.pi===pi).reduce((a,c)=>a+c.qty,0);
+  $(`incart-${pi}`).innerHTML=qtyInCart?`<span class="in-cart-badge">בסל: ${qtyInCart}</span>`:'';
+}
+
+function toggleCart(){
+  $('cart-overlay').classList.toggle('hidden');
+}
+function closeCartOutside(e){if(e.target===$('cart-overlay'))toggleCart();}
+
+async function submitOrder(){
+  const inf=state.currentUser;
+  if(!state.cart.length)return;
+  $('submit-btn').disabled=true;
+  $('submit-btn').textContent='שולחת...';
+  const notes=$('cart-notes').value;
+  const lines=state.cart.map(c=>`• ${c.product} | מידה: ${c.size} | כמות: ${c.qty}`);
+  const total=state.cart.reduce((a,c)=>a+c.qty,0);
+  const body=`שלום לורה,\n\nהבחירות של ${inf.name} לדרופ: ${state.dropLabel}\n\n${lines.join('\n')}\n\nסה"כ: ${total} פריטים${notes?'\n\nהערות: '+notes:''}\n\nנשלח אוטומטית ממערכת ADDICT`;
+  try{
+    await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:300,
+        system:'You are a helpful assistant. Use the Gmail MCP tool to send an email. Do it immediately.',
+        messages:[{role:'user',content:`Send email NOW using Gmail MCP:\nTo: ${DEST_EMAIL}\nSubject: בחירות ${inf.name} — ${state.dropLabel}\nBody:\n${body}`}],
+        mcp_servers:[{type:'url',url:'https://gmailmcp.googleapis.com/mcp/v1',name:'gmail'}]
+      })
+    });
+  }catch(e){console.error('email err',e);}
+  inf.submitted=true;
+  $('cart-overlay').classList.add('hidden');
+  $('products-grid').classList.add('hidden');
+  $('products-loading').classList.add('hidden');
+  $('success-screen').classList.remove('hidden');
+  $('success-msg').innerHTML=`הבחירות נשלחו בהצלחה ל-<strong>${DEST_EMAIL}</strong><br/>תודה ${inf.name}! 💕`;
+}
+
+$('auth-user').addEventListener('keydown',e=>e.key==='Enter'&&$('auth-pass').focus());
+$('auth-pass').addEventListener('keydown',e=>e.key==='Enter'&&doLogin());
+</script>
+</body>
+</html>
