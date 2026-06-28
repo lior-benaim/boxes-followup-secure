@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>Addict Boxes — כניסה</title>
+<title>Addict Boxes</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#1a1a1a;min-height:100vh;display:flex;align-items:center;justify-content:center}
-.login-box{background:#fff;border-radius:16px;padding:36px 32px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.4);text-align:center}
+.login-box{background:#fff;border-radius:16px;padding:36px 32px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.4);text-align:center;display:none}
 .login-logo{font-size:44px;margin-bottom:8px}
 .login-title{font-size:22px;font-weight:800;color:#1a1a1a;margin-bottom:4px}
 .login-sub{font-size:13px;color:#aaa;margin-bottom:24px}
@@ -17,11 +17,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .login-btn:hover{background:#333}
 .login-btn:disabled{background:#999;cursor:not-allowed}
 .login-error{color:#dc2626;font-size:13px;margin-top:8px;min-height:18px}
-#loading{display:none;position:fixed;inset:0;background:#1a1a1a;z-index:999}
 </style>
 </head>
 <body>
-<div id="loading"></div>
+<!-- Login box starts HIDDEN — only shown if not already authenticated -->
 <div class="login-box" id="login-box">
   <div class="login-logo">📦</div>
   <div class="login-title">Addict Boxes</div>
@@ -35,46 +34,49 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <button class="login-btn" id="login-btn" onclick="doLogin()">כניסה</button>
   <div class="login-error" id="login-error"></div>
 </div>
+
 <script>
-// If already logged in (has valid session), go straight to app — no flash
-async function checkSession(){
-  try{
-    const res = await fetch('/app', { method: 'HEAD' });
-    if(res.ok){
-      // Already authenticated — redirect silently
-      document.getElementById('loading').style.display='block';
+// On page load: check if already authenticated
+// If yes → go straight to /app (dark screen, no flash)
+// If no → show the login form
+(async function(){
+  try {
+    const res = await fetch('/api/check', { method: 'GET' });
+    if (res.ok) {
+      // Already logged in - go to app without showing login form
       window.location.replace('/app');
+      return;
     }
-  } catch(e){}
-}
-checkSession();
+  } catch(e) {}
+  // Not logged in - show the login form
+  document.getElementById('login-box').style.display = 'block';
+})();
 
 async function doLogin(){
-  const u=document.getElementById('login-user').value.trim();
-  const p=document.getElementById('login-pass').value;
-  const err=document.getElementById('login-error');
-  const btn=document.getElementById('login-btn');
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
+  const err = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
   if(!u||!p){err.textContent='נא למלא שם משתמש וסיסמה';return;}
-  btn.disabled=true;btn.textContent='...מתחבר';
-  try{
-    const res=await fetch('/api/auth',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({username:u,password:p})
+  btn.disabled=true; btn.textContent='...מתחבר';
+  try {
+    const res = await fetch('/api/auth', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({username:u, password:p})
     });
-    const data=await res.json();
-    if(res.ok&&data.ok){
-      document.getElementById('loading').style.display='block';
-      window.location.href='/app';
+    const data = await res.json();
+    if(res.ok && data.ok){
+      window.location.href = '/app';
     } else {
-      err.textContent=data.error||'שם משתמש או סיסמה שגויים';
-      document.getElementById('login-pass').value='';
+      err.textContent = data.error || 'שם משתמש או סיסמה שגויים';
+      document.getElementById('login-pass').value = '';
       document.getElementById('login-pass').focus();
     }
-  } catch(e){
-    err.textContent='שגיאת רשת — נסי שוב';
+  } catch(e) {
+    err.textContent = 'שגיאת רשת — נסי שוב';
   }
-  btn.disabled=false;btn.textContent='כניסה';
+  btn.disabled=false; btn.textContent='כניסה';
 }
 </script>
 </body>
