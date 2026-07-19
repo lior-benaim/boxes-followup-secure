@@ -294,7 +294,7 @@ tr.has-loc-row td:first-child::after{content:' 📍';font-size:11px}
       <button class="btn-drops" id="btn-drops" onclick="showDrops()">📅 Drops</button>
       <button class="btn-export" id="btn-export-main" onclick="exportCurrentView()" style="display:none">📥 Export</button>
       <button class="btn-upload" onclick="document.getElementById('file-input').click()">⬆ Upload PL</button>
-      <button class="btn-upload" style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5" onclick="window.location.href='/api/logout'">🚪 התנתקות</button>
+      <button class="btn-upload" style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5" onclick="window.location.href='/api/logout'">🚪 יציאה</button>
       <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none" onchange="handleFile(event)">
     </div>
   </div>
@@ -414,8 +414,10 @@ let dropDates={};
 let dropDateList={};  // drop dates that exist even with no items yet (key=date)
 let dropsExpanded={};
 let dropImages={};  // itemCode -> base64 image
+let manualItems={};  // items added manually without a PL: fkey(item) -> {item,styleName}
 let dropAddPanelOpen=false, dropAddDate='', dropAddSearch='';  // "+" add-to-drop panel state
 let dropCardAddOpen=null, dropCardAddSearch='';  // inline "add item" inside an open drop card
+let dropCardManualOpen=null;  // which drop card has the manual-add form open
 let prefixFilter='';  // filter cartons by prefix e.g. "ACE"
 
 function notify(msg,type='success'){
@@ -856,6 +858,8 @@ function showDrops(){
 function getAllItemsAcrossShipments(){
   // item code -> { item, data:{styleName,ctns:Set,entries:[]}, shipNames:[...], shipName, shipIds:[...] }
   const result={};
+
+  // 1. Real shipments from PL files
   Object.entries(shipments).forEach(([shipId,ship])=>{
     const entries=ship.entries||[];
     const itemMap=groupByItem(entries);
@@ -871,6 +875,24 @@ function getAllItemsAcrossShipments(){
       }
     });
   });
+
+  // 2. Manual items (added without PL) — only included if NOT already found in a real shipment
+  // This gives auto-connection: once a PL arrives with this item, the PL wins automatically.
+  Object.entries(manualItems).forEach(([key,mi])=>{
+    const item=mi.item;
+    if(!result[item]){
+      result[item]={
+        item,
+        data:{item,styleName:mi.styleName||'',ctns:new Set(),entries:[]},
+        shipNames:['עדיין אין PL'],
+        shipName:'עדיין אין PL',
+        shipIds:[],
+        isManual:true
+      };
+    }
+    // If item already in result from a real PL — do nothing (PL wins, badge updates automatically)
+  });
+
   return result;
 }
 
@@ -1030,6 +1052,66 @@ async function deleteEmptyDrop(date){
   renderDrops();
 }
 
+// ===== Manual item (no PL) =====
+function toggleDropCardManual(date){
+  if(dropCardManualOpen===date){dropCardManualOpen=null;}
+  else{dropCardManualOpen=date;dropsExpanded[date]=true;}
+  renderDrops();
+}
+
+function renderDropCardManualForm(date){
+  const fdate=fkey(date);
+  return `<div style="margin-top:10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px">
+    <div style="font-size:13px;font-weight:700;color:#c2410c;margin-bottom:8px">➕ הוספת פריט ללא PL</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <input type="text" id="manual-code-${fdate}" placeholder="קוד פריט (לדוג׳ ADD0187)"
+        style="flex:1;min-width:140px;border:1.5px solid #fed7aa;border-radius:8px;padding:7px 10px;font-size:13px;outline:none"
+        onkeydown="if(event.key==='Enter')document.getElementById('manual-name-${fdate}').focus()">
+      <input type="text" id="manual-name-${fdate}" placeholder="שם פריט (אופציונלי)"
+        style="flex:1;min-width:140px;border:1.5px solid #fed7aa;border-radius:8px;padding:7px 10px;font-size:13px;outline:none"
+        onkeydown="if(event.key==='Enter')addManualItemToDrop('${date}')">
+    </div>
+    <button onclick="addManualItemToDrop('${date}')"
+      style="background:#c2410c;color:#fff;border:none;border-radius:8px;padding:7px 16px;font-size:13px;cursor:pointer;font-weight:700">
+      + הוסף לדרופ
+    </button>
+  </div>`;
+}
+
+async function addManualItemToDrop(date){
+  const fdate=fkey(date);
+  const codeEl=document.getElementById('manual-code-'+fdate);
+  const nameEl=document.getElementById('manual-name-'+fdate);
+  if(!codeEl)return;
+  const item=codeEl.value.trim().toUpperCase();
+  const styleName=nameEl?nameEl.value.trim():'';
+  if(!item){notify('נא להזין קוד פריט','error');return;}
+
+  // Save to manualItems (only if not already in a real shipment)
+  const allItems=getAllItemsAcrossShipments();
+  if(allItems[item]&&!allItems[item].isManual){
+    // Item exists in a real PL — just add to drop directly
+    await db.ref('dropDates/'+fkey(item)).set(date);
+    await db.ref('dropDateList/'+date).set(true);
+    notify('✓ '+item+' נמצא ב-PL ונוסף לדרופ אוטומטית!');
+  } else {
+    // Save as manual item
+    await db.ref('manualItems/'+fkey(item)).set({item,styleName:styleName||item});
+    await db.ref('dropDates/'+fkey(item)).set(date);
+    await db.ref('dropDateList/'+date).set(true);
+    notify('✓ '+item+' נוסף לדרופ (ללא PL)');
+  }
+  if(codeEl)codeEl.value='';
+  if(nameEl)nameEl.value='';
+}
+
+async function removeManualItem(item){
+  if(!confirm('להסיר את '+item+' מהמערכת לגמרי (כולל מהדרופ)?'))return;
+  await db.ref('manualItems/'+fkey(item)).remove();
+  await db.ref('dropDates/'+fkey(item)).remove();
+  notify('✓ '+item+' הוסר');
+}
+
 function renderDrops(){
   const completed=getItemsWithDropDates();
   const el=document.getElementById('drops-list');
@@ -1074,13 +1156,17 @@ function renderDrops(){
           const imgKey=fkey(item);
           const img=dropImages[imgKey]||'';
           const imgOpen=dropsExpanded['img_'+item]===true;
+          const isManual=shipNames&&shipNames.length===1&&shipNames[0]==='עדיין אין PL';
+          const badgeHtml=isManual
+            ? `<span style="font-size:10px;color:#c2410c;background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;padding:2px 6px;font-weight:600">עדיין אין PL</span>`
+            : shipBadges(shipNames);
           return `<div>
             <div class="drops-item-row">
               <div style="flex:1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer" onclick="toggleDropItem('${item}')">
                 <span class="drops-item-code">${item}</span>
                 <span class="drops-item-name">${data.styleName||''}</span>
-                <span class="drops-item-colors">${colors.join(' · ')}</span>
-                ${shipBadges(shipNames)}
+                ${colors.length?`<span class="drops-item-colors">${colors.join(' · ')}</span>`:''}
+                ${badgeHtml}
                 ${img?'<span style="font-size:11px;color:#7c3aed;font-weight:600">📷</span>':''}
                 <span style="font-size:11px;color:#ccc">${imgOpen?'▲':'▼'}</span>
               </div>
@@ -1100,14 +1186,19 @@ function renderDrops(){
     };
 
     const cardAddOpen=dropCardAddOpen===date;
+    const cardManualOpen=dropCardManualOpen===date;
     const addArea=`<div style="padding:10px 16px;border-top:1px solid #f0f0f0;background:#faf9ff">
-        <button onclick="toggleDropCardAdd('${date}')" style="background:${cardAddOpen?'#ede9fe':'#7c3aed'};color:${cardAddOpen?'#7c3aed':'#fff'};border:1px solid #7c3aed;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;font-weight:600">${cardAddOpen?'✕ סגור חיפוש':'➕ הוסף פריט לדרופ הזה'}</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button onclick="toggleDropCardAdd('${date}')" style="background:${cardAddOpen?'#ede9fe':'#7c3aed'};color:${cardAddOpen?'#7c3aed':'#fff'};border:1px solid #7c3aed;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;font-weight:600">${cardAddOpen?'✕ סגור חיפוש':'➕ הוסף פריט לדרופ הזה'}</button>
+          <button onclick="toggleDropCardManual('${date}')" style="background:${cardManualOpen?'#fff7ed':'#c2410c'};color:${cardManualOpen?'#c2410c':'#fff'};border:1px solid #fed7aa;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;font-weight:600">${cardManualOpen?'✕ סגור':'📝 הוסף פריט ללא PL'}</button>
+        </div>
         ${cardAddOpen?`<div style="margin-top:10px">
           <input type="text" id="drop-card-search-${fkey(date)}" placeholder="חיפוש פריט מכל המשלוחים (קוד / שם)..." value="${dropCardAddSearch}"
             oninput="dropCardAddSearch=this.value;renderDropCardResults('${date}')"
             style="width:100%;border:1.5px solid #ddd;border-radius:8px;padding:8px 12px;font-size:14px;outline:none;margin-bottom:8px">
           <div id="drop-card-results-${fkey(date)}"></div>
         </div>`:''}
+        ${cardManualOpen?renderDropCardManualForm(date):''}
       </div>`;
 
     return `<div class="drops-date-card">
@@ -1764,6 +1855,11 @@ function startDataListeners(){
   db.ref('dropImages').on('value',snap=>{
     dropImages=snap.val()||{};
     if(document.getElementById('page-drops').classList.contains('active'))renderDrops();
+  });
+
+  db.ref('manualItems').on('value',snap=>{
+    manualItems=snap.val()||{};
+    if(document.getElementById('page-drops').classList.contains('active')){renderDrops();renderDropAddResults();}
   });
 }
 
