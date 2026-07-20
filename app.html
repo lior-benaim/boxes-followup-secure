@@ -840,45 +840,53 @@ function renderOnlineList(date){
       list.map(({item,data,shipNames,isManual})=>{
         const uploaded=!!onlineUploaded[fkey(item)];
         const hasShipments=!isManual&&shipNames&&shipNames.length>0&&shipNames[0]!=='עדיין אין PL';
+        const itemExpanded=!!dropsExpanded['online_'+item];
 
-        // Build sizes breakdown per color from entries
+        // Build sizes breakdown per color from entries — round all quantities
         const colorSizes={};
         (data.entries||[]).forEach(e=>{
-          if(!colorSizes[e.color])colorSizes[e.color]={qty:0,sizes:{}};
-          colorSizes[e.color].qty+=e.qty;
+          const color=e.color||'';
+          if(!colorSizes[color])colorSizes[color]={qty:0,sizes:{}};
+          colorSizes[color].qty+=Math.round(parseFloat(e.qty)||0);
           Object.entries(e.sizes||{}).forEach(([s,q])=>{
-            colorSizes[e.color].sizes[s]=(colorSizes[e.color].sizes[s]||0)+q;
+            const qn=Math.round(parseFloat(q)||0);
+            if(qn>0)colorSizes[color].sizes[s]=(colorSizes[color].sizes[s]||0)+qn;
           });
         });
-        const colorRows=Object.entries(colorSizes).sort(([a],[b])=>a.localeCompare(b));
+        const colorRows=Object.entries(colorSizes).filter(([c])=>c).sort(([a],[b])=>a.localeCompare(b));
         const totalQty=colorRows.reduce((s,[,v])=>s+v.qty,0);
 
         const shipBadgesHtml=isManual
           ? `<span class="online-no-pl-badge">עדיין אין PL</span>`
           : (shipNames||[]).map(sn=>`<span class="all-ship-badge">${sn}</span>`).join(' ');
 
+        // Collapsible sizes — each color is a row, sizes listed clearly below it
         const sizesHTML=colorRows.length>0?`
-          <div style="overflow-x:auto;padding:0 14px 12px">
-            <table class="online-sizes-table">
-              <thead><tr>
-                <th>צבע</th><th>סה"כ</th><th>מידות</th>
-              </tr></thead>
-              <tbody>
-                ${colorRows.map(([color,{qty,sizes}])=>`
-                  <tr>
-                    <td style="font-weight:600">${color}</td>
-                    <td style="font-weight:700;color:#1a1a1a">${qty}</td>
-                    <td style="color:#666;font-size:11px">${Object.entries(sizes).map(([s,q])=>`${s}: ${q}`).join(' · ')}</td>
-                  </tr>`).join('')}
-              </tbody>
-            </table>
+          <div style="padding:0 14px 12px">
+            ${colorRows.map(([color,{qty,sizes}])=>{
+              const sizeEntries=Object.entries(sizes).sort(([a],[b])=>a.localeCompare(b));
+              return `<div style="margin-bottom:8px;border:1px solid #f0f0f0;border-radius:8px;overflow:hidden">
+                <div style="display:flex;align-items:center;padding:7px 10px;background:#f8f8f8;gap:8px">
+                  <span style="font-weight:700;font-size:13px;flex:1">${color}</span>
+                  <span style="font-weight:700;color:#1a1a1a;font-size:13px">סה"כ: ${qty}</span>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px">
+                  ${sizeEntries.map(([s,q])=>`
+                    <div style="background:#fff;border:1px solid #e8e8e8;border-radius:6px;padding:4px 10px;text-align:center;min-width:54px">
+                      <div style="font-size:10px;color:#888;font-weight:600">${s}</div>
+                      <div style="font-size:14px;font-weight:700;color:#1a1a1a">${q}</div>
+                    </div>`).join('')}
+                </div>
+              </div>`;
+            }).join('')}
           </div>`:
           `<div style="padding:8px 14px 12px;font-size:12px;color:#aaa">אין נתוני מידות (ללא PL)</div>`;
 
         return `<div class="online-item-card ${uploaded?'uploaded':''} ${!hasShipments?'no-pl':''}">
-          <div class="online-item-header">
+          <div class="online-item-header" style="cursor:pointer" onclick="dropsExpanded['online_${item}']=!dropsExpanded['online_${item}'];renderOnlineList('${date}')">
             <div style="flex:1;min-width:0">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+                <span style="font-size:13px;color:#aaa">${itemExpanded?'▲':'▼'}</span>
                 <span class="online-item-code">${item}</span>
                 <span class="online-item-name">${data.styleName||''}</span>
               </div>
@@ -890,13 +898,13 @@ function renderOnlineList(date){
             </div>
             ${hasShipments
               ? `<button class="online-upload-btn ${uploaded?'done':''}"
-                  onclick="${uploaded?`unmarkOnlineUpload('${item}')`:`markOnlineUpload('${item}','${date}')`}">
+                  onclick="event.stopPropagation();${uploaded?`unmarkOnlineUpload('${item}')`:`markOnlineUpload('${item}','${date}')`}">
                   ${uploaded?'✓ הועלה':'עלה לאתר ✓'}
                 </button>`
               : `<button disabled style="background:#e2e8f0;color:#94a3b8;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:not-allowed">ללא PL</button>`
             }
           </div>
-          ${sizesHTML}
+          ${itemExpanded?sizesHTML:''}
         </div>`;
       }).join('');
   };
