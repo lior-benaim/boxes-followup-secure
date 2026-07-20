@@ -233,7 +233,27 @@ tr.has-loc-row td:first-child::after{content:' 📍';font-size:11px}
 .all-ship-badge{font-size:10px;color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe;border-radius:4px;padding:2px 6px;font-weight:600;flex-shrink:0}
 .location-banner{background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:13px;color:#92400e;display:flex;align-items:center;gap:6px}
 
-/* EXPORT BUTTON */
+/* ONLINE BUTTON */
+.btn-online{background:#0ea5e9;border:none;border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;color:#fff;font-weight:600;display:none;align-items:center;gap:5px;white-space:nowrap}
+.btn-online:hover{background:#0284c7}
+
+/* ONLINE PAGE */
+.online-drop-select{width:100%;border:1.5px solid #ddd;border-radius:10px;padding:10px 14px;font-size:15px;outline:none;background:#fafafa;color:#222;cursor:pointer;margin-bottom:14px}
+.online-drop-select:focus{border-color:#0ea5e9}
+.online-item-card{background:#fff;border-radius:10px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,0.07);border:1.5px solid #e8e8e8;overflow:hidden}
+.online-item-card.uploaded{border-color:#16a34a;background:#f0fdf4}
+.online-item-card.no-pl{border-color:#e2e8f0;background:#f8fafc;opacity:.6}
+.online-item-header{display:flex;align-items:center;padding:12px 14px;gap:10px;flex-wrap:wrap}
+.online-item-code{font-weight:700;font-size:14px;color:#1a1a1a}
+.online-item-name{font-size:13px;color:#666;flex:1}
+.online-upload-btn{background:#0ea5e9;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:700;white-space:nowrap;flex-shrink:0}
+.online-upload-btn:hover{background:#0284c7}
+.online-upload-btn.done{background:#16a34a;cursor:default}
+.online-sizes-table{width:100%;border-collapse:collapse;font-size:12px}
+.online-sizes-table th{background:#f8f8f8;padding:5px 10px;font-weight:600;color:#666;text-align:left;border-bottom:1px solid #eee}
+.online-sizes-table td{padding:6px 10px;border-bottom:1px solid #f5f5f5}
+.online-sizes-table tr:last-child td{border-bottom:none}
+.online-no-pl-badge{font-size:10px;color:#c2410c;background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;padding:2px 6px;font-weight:600}
 .btn-export{background:#16a34a;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .btn-export:hover{background:#15803d}
 
@@ -292,6 +312,7 @@ tr.has-loc-row td:first-child::after{content:' 📍';font-size:11px}
         <span class="badge" id="locations-badge">0</span>
       </button>
       <button class="btn-drops" id="btn-drops" onclick="showDrops()">📅 Drops</button>
+      <button class="btn-online" id="btn-online" onclick="showOnline()">🌐 אונליין</button>
       <button class="btn-export" id="btn-export-main" onclick="exportCurrentView()" style="display:none">📥 Export</button>
       <button class="btn-upload" onclick="document.getElementById('file-input').click()">⬆ Upload PL</button>
       <button class="btn-upload" style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5" onclick="window.location.href='/api/logout'">🚪 יציאה</button>
@@ -399,6 +420,24 @@ tr.has-loc-row td:first-child::after{content:' 📍';font-size:11px}
 </div>
 </div>
 
+<!-- ONLINE PAGE -->
+<div id="page-online" class="page">
+<div class="app">
+  <div class="loc-header">
+    <button class="btn-back" onclick="showMain()">← Back</button>
+    <div style="flex:1">
+      <div class="loc-title">🌐 אונליין</div>
+      <div class="loc-subtitle" id="online-subtitle">בחרי תאריך דרופ</div>
+    </div>
+    <button class="btn-export" onclick="exportOnline()">📥 Export</button>
+  </div>
+  <select class="online-drop-select" id="online-date-select" onchange="onOnlineDateChange(this.value)">
+    <option value="">-- בחרי תאריך דרופ --</option>
+  </select>
+  <div id="online-list"></div>
+</div>
+</div>
+
 <div id="notification" class="notification"></div>
 
 <script>
@@ -415,6 +454,7 @@ let dropDateList={};  // drop dates that exist even with no items yet (key=date)
 let dropsExpanded={};
 let dropImages={};  // itemCode -> base64 image
 let manualItems={};  // items added manually without a PL: fkey(item) -> {item,styleName}
+let onlineUploaded={};  // items marked as uploaded to site: fkey(item) -> true
 let dropAddPanelOpen=false, dropAddDate='', dropAddSearch='';  // "+" add-to-drop panel state
 let dropCardAddOpen=null, dropCardAddSearch='';  // inline "add item" inside an open drop card
 let dropCardManualOpen=null;  // which drop card has the manual-add form open
@@ -708,13 +748,204 @@ function getCurrentEntries(){
 function showLocations(){
   document.getElementById('page-main').className='page';
   document.getElementById('page-drops').className='page';
+  document.getElementById('page-online').className='page';
   document.getElementById('page-locations').className='page active';
   renderLocations();
 }
 function showMain(){
   document.getElementById('page-locations').className='page';
   document.getElementById('page-drops').className='page';
+  document.getElementById('page-online').className='page';
   document.getElementById('page-main').className='page active';
+}
+
+// ===== ONLINE PAGE =====
+function showOnline(){
+  document.getElementById('page-main').className='page';
+  document.getElementById('page-locations').className='page';
+  document.getElementById('page-drops').className='page';
+  document.getElementById('page-online').className='page active';
+  renderOnlineDateSelect();
+  document.getElementById('online-list').innerHTML='';
+  document.getElementById('online-subtitle').textContent='בחרי תאריך דרופ';
+}
+
+function renderOnlineDateSelect(){
+  const sel=document.getElementById('online-date-select');
+  if(!sel)return;
+  // Get all drop dates that have items
+  const allItems=getAllItemsAcrossShipments();
+  const usedDates=new Set();
+  Object.values(allItems).forEach(({item})=>{
+    const d=dropDates[fkey(item)];
+    if(d)usedDates.add(d);
+  });
+  // Also include dates from dropDateList
+  Object.keys(dropDateList||{}).forEach(d=>usedDates.add(d));
+  const dates=[...usedDates].sort();
+  const current=sel.value;
+  sel.innerHTML='<option value="">-- בחרי תאריך דרופ --</option>'+
+    dates.map(d=>`<option value="${d}" ${d===current?'selected':''}>${formatDate(d)}</option>`).join('');
+}
+
+function onOnlineDateChange(date){
+  if(!date){
+    document.getElementById('online-list').innerHTML='';
+    document.getElementById('online-subtitle').textContent='בחרי תאריך דרופ';
+    return;
+  }
+  renderOnlineList(date);
+}
+
+function getOnlineItemsForDate(date){
+  // All items assigned to this drop date, with full cross-shipment data
+  const allItems=getAllItemsAcrossShipments();
+  const result=[];
+  Object.values(allItems).forEach(({item,data,shipNames,isManual})=>{
+    if(dropDates[fkey(item)]===date){
+      result.push({item,data,shipNames,isManual:!!isManual});
+    }
+  });
+  // Sort: women first (ADD), then kids (LADD), alphabetically within each
+  result.sort((a,b)=>{
+    const aK=a.item.startsWith('LADD')?1:0;
+    const bK=b.item.startsWith('LADD')?1:0;
+    if(aK!==bK)return aK-bK;
+    return a.item.localeCompare(b.item);
+  });
+  return result;
+}
+
+function renderOnlineList(date){
+  const items=getOnlineItemsForDate(date);
+  const el=document.getElementById('online-list');
+  const subtitle=document.getElementById('online-subtitle');
+
+  if(items.length===0){
+    el.innerHTML=`<div class="loc-empty"><div class="loc-empty-icon">📦</div><div class="loc-empty-title">אין פריטים לתאריך זה</div></div>`;
+    subtitle.textContent=formatDate(date)+' · 0 פריטים';
+    return;
+  }
+
+  const uploadedCount=items.filter(({item})=>onlineUploaded[fkey(item)]).length;
+  subtitle.textContent=`${formatDate(date)} · ${items.length} פריטים · ${uploadedCount} הועלו`;
+
+  // Section headers
+  const women=items.filter(({item})=>!item.startsWith('LADD'));
+  const kids=items.filter(({item})=>item.startsWith('LADD'));
+
+  const renderSection=(list,title,emoji)=>{
+    if(!list.length)return'';
+    return `<div class="drops-section-title">${emoji} ${title} (${list.length})</div>`+
+      list.map(({item,data,shipNames,isManual})=>{
+        const uploaded=!!onlineUploaded[fkey(item)];
+        const hasShipments=!isManual&&shipNames&&shipNames.length>0&&shipNames[0]!=='עדיין אין PL';
+
+        // Build sizes breakdown per color from entries
+        const colorSizes={};
+        (data.entries||[]).forEach(e=>{
+          if(!colorSizes[e.color])colorSizes[e.color]={qty:0,sizes:{}};
+          colorSizes[e.color].qty+=e.qty;
+          Object.entries(e.sizes||{}).forEach(([s,q])=>{
+            colorSizes[e.color].sizes[s]=(colorSizes[e.color].sizes[s]||0)+q;
+          });
+        });
+        const colorRows=Object.entries(colorSizes).sort(([a],[b])=>a.localeCompare(b));
+        const totalQty=colorRows.reduce((s,[,v])=>s+v.qty,0);
+
+        const shipBadgesHtml=isManual
+          ? `<span class="online-no-pl-badge">עדיין אין PL</span>`
+          : (shipNames||[]).map(sn=>`<span class="all-ship-badge">${sn}</span>`).join(' ');
+
+        const sizesHTML=colorRows.length>0?`
+          <div style="overflow-x:auto;padding:0 14px 12px">
+            <table class="online-sizes-table">
+              <thead><tr>
+                <th>צבע</th><th>סה"כ</th><th>מידות</th>
+              </tr></thead>
+              <tbody>
+                ${colorRows.map(([color,{qty,sizes}])=>`
+                  <tr>
+                    <td style="font-weight:600">${color}</td>
+                    <td style="font-weight:700;color:#1a1a1a">${qty}</td>
+                    <td style="color:#666;font-size:11px">${Object.entries(sizes).map(([s,q])=>`${s}: ${q}`).join(' · ')}</td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`:
+          `<div style="padding:8px 14px 12px;font-size:12px;color:#aaa">אין נתוני מידות (ללא PL)</div>`;
+
+        return `<div class="online-item-card ${uploaded?'uploaded':''} ${!hasShipments?'no-pl':''}">
+          <div class="online-item-header">
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+                <span class="online-item-code">${item}</span>
+                <span class="online-item-name">${data.styleName||''}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                ${shipBadgesHtml}
+                ${totalQty?`<span style="font-size:12px;color:#888;font-weight:600">סה"כ: ${totalQty} יח'</span>`:''}
+                ${uploaded?'<span style="font-size:12px;color:#16a34a;font-weight:700">✓ הועלה לאתר</span>':''}
+              </div>
+            </div>
+            ${hasShipments
+              ? `<button class="online-upload-btn ${uploaded?'done':''}"
+                  onclick="${uploaded?`unmarkOnlineUpload('${item}')`:`markOnlineUpload('${item}','${date}')`}">
+                  ${uploaded?'✓ הועלה':'עלה לאתר ✓'}
+                </button>`
+              : `<button disabled style="background:#e2e8f0;color:#94a3b8;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:not-allowed">ללא PL</button>`
+            }
+          </div>
+          ${sizesHTML}
+        </div>`;
+      }).join('');
+  };
+
+  el.innerHTML=
+    renderSection(women,'Women','👩')+
+    renderSection(kids,'Kids','👧');
+}
+
+async function markOnlineUpload(item,date){
+  await db.ref('onlineUploaded/'+fkey(item)).set(true);
+  notify('✓ '+item+' סומן כ"הועלה לאתר"');
+  renderOnlineList(date);
+}
+
+async function unmarkOnlineUpload(item){
+  const date=dropDates[fkey(item)];
+  await db.ref('onlineUploaded/'+fkey(item)).remove();
+  notify('✓ סימון הוסר');
+  if(date)renderOnlineList(date);
+}
+
+function exportOnline(){
+  const sel=document.getElementById('online-date-select');
+  const date=sel?sel.value:'';
+  if(!date){notify('בחרי תאריך דרופ קודם','error');return;}
+  const items=getOnlineItemsForDate(date);
+  if(!items.length){notify('אין פריטים לייצוא','error');return;}
+  const rows=[];
+  items.forEach(({item,data,shipNames,isManual})=>{
+    const uploaded=!!onlineUploaded[fkey(item)];
+    const colorSizes={};
+    (data.entries||[]).forEach(e=>{
+      if(!colorSizes[e.color])colorSizes[e.color]={qty:0,sizes:{}};
+      colorSizes[e.color].qty+=e.qty;
+      Object.entries(e.sizes||{}).forEach(([s,q])=>{
+        colorSizes[e.color].sizes[s]=(colorSizes[e.color].sizes[s]||0)+q;
+      });
+    });
+    if(Object.keys(colorSizes).length===0){
+      rows.push({'Style Code':item,'Style Name':data.styleName||'','Color':'','Total Qty':'','Sizes':'','Shipments':isManual?'עדיין אין PL':(shipNames||[]).join(', '),'Uploaded':uploaded?'✓':''});
+    } else {
+      Object.entries(colorSizes).forEach(([color,{qty,sizes}])=>{
+        rows.push({'Style Code':item,'Style Name':data.styleName||'','Color':color,'Total Qty':qty,'Sizes':Object.entries(sizes).map(([s,q])=>s+':'+q).join(' '),'Shipments':isManual?'עדיין אין PL':(shipNames||[]).join(', '),'Uploaded':uploaded?'✓':''});
+      });
+    }
+  });
+  exportToExcel(rows,'online_'+date);
+  notify('✓ יוצאו '+rows.length+' שורות');
 }
 
 function renderLocations(){
@@ -849,6 +1080,7 @@ async function removeItemFromDrop(item){
 function showDrops(){
   document.getElementById('page-main').className='page';
   document.getElementById('page-locations').className='page';
+  document.getElementById('page-online').className='page';
   document.getElementById('page-drops').className='page active';
   renderDrops();
   renderDropAddPanel();
@@ -1274,6 +1506,8 @@ function render(){
   // Drops button is ALWAYS available once a shipment is loaded,
   // even if the active shipment has no items assigned to a drop.
   if(btnDrops)btnDrops.style.display=activeShipment?'flex':'none';
+  const btnOnline=document.getElementById('btn-online');
+  if(btnOnline)btnOnline.style.display=activeShipment?'flex':'none';
   const btnExport=document.getElementById('btn-export-main');
   if(btnExport)btnExport.style.display=activeShipment?'flex':'none';
 
@@ -1845,6 +2079,11 @@ function startDataListeners(){
     dropDates=snap.val()||{};
     if(document.getElementById('page-locations').classList.contains('active'))renderLocations();
     if(document.getElementById('page-drops').classList.contains('active')){renderDrops();renderDropAddResults();}
+    if(document.getElementById('page-online').classList.contains('active')){
+      renderOnlineDateSelect();
+      const sel=document.getElementById('online-date-select');
+      if(sel&&sel.value)renderOnlineList(sel.value);
+    }
   });
 
   db.ref('dropDateList').on('value',snap=>{
@@ -1860,6 +2099,15 @@ function startDataListeners(){
   db.ref('manualItems').on('value',snap=>{
     manualItems=snap.val()||{};
     if(document.getElementById('page-drops').classList.contains('active')){renderDrops();renderDropAddResults();}
+  });
+
+  db.ref('onlineUploaded').on('value',snap=>{
+    onlineUploaded=snap.val()||{};
+    if(document.getElementById('page-online').classList.contains('active')){
+      const sel=document.getElementById('online-date-select');
+      if(sel&&sel.value)renderOnlineList(sel.value);
+      renderOnlineDateSelect();
+    }
   });
 }
 
