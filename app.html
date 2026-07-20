@@ -849,6 +849,8 @@ function renderOnlineList(date){
           if(!colorSizes[color])colorSizes[color]={qty:0,sizes:{}};
           colorSizes[color].qty+=Math.round(parseFloat(e.qty)||0);
           Object.entries(e.sizes||{}).forEach(([s,q])=>{
+            const sClean=s.trim().toLowerCase();
+            if(sClean==='amount'||sClean==='total'||sClean==='qty')return; // skip non-size columns
             const qn=Math.round(parseFloat(q)||0);
             if(qn>0)colorSizes[color].sizes[s]=(colorSizes[color].sizes[s]||0)+qn;
           });
