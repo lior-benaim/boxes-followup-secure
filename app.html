@@ -799,20 +799,21 @@ function onOnlineDateChange(date){
 }
 
 function getOnlineItemsForDate(date){
-  // All items assigned to this drop date, with full cross-shipment data
+  // All item variants assigned to this drop date
   const allItems=getAllItemsAcrossShipments();
   const result=[];
-  Object.values(allItems).forEach(({item,data,shipNames,isManual})=>{
+  Object.values(allItems).forEach(({item,compositeKey,data,shipNames,isManual})=>{
     if(dropDates[fkey(item)]===date){
-      result.push({item,data,shipNames,isManual:!!isManual});
+      result.push({item,compositeKey,data,shipNames,isManual:!!isManual});
     }
   });
-  // Sort: women first (ADD), then kids (LADD), alphabetically within each
+  // Sort: women first (ADD not LADD), then kids (LADD), then alphabetically by code+name
   result.sort((a,b)=>{
     const aK=a.item.startsWith('LADD')?1:0;
     const bK=b.item.startsWith('LADD')?1:0;
     if(aK!==bK)return aK-bK;
-    return a.item.localeCompare(b.item);
+    if(a.item!==b.item)return a.item.localeCompare(b.item);
+    return (a.data.styleName||'').localeCompare(b.data.styleName||'');
   });
   return result;
 }
@@ -828,7 +829,7 @@ function renderOnlineList(date){
     return;
   }
 
-  const uploadedCount=items.filter(({item})=>onlineUploaded[fkey(item)]).length;
+  const uploadedCount=items.filter(({compositeKey})=>onlineUploaded[fkey(compositeKey||'')]).length;
   subtitle.textContent=`${formatDate(date)} · ${items.length} פריטים · ${uploadedCount} הועלו`;
 
   // Section headers
@@ -838,10 +839,11 @@ function renderOnlineList(date){
   const renderSection=(list,title,emoji)=>{
     if(!list.length)return'';
     return `<div class="drops-section-title">${emoji} ${title} (${list.length})</div>`+
-      list.map(({item,data,shipNames,isManual})=>{
-        const uploaded=!!onlineUploaded[fkey(item)];
+      list.map(({item,compositeKey,data,shipNames,isManual})=>{
+        const ck=fkey(compositeKey||item);
+        const uploaded=!!onlineUploaded[ck];
         const hasShipments=!isManual&&shipNames&&shipNames.length>0&&shipNames[0]!=='עדיין אין PL';
-        const itemExpanded=!!dropsExpanded['online_'+item];
+        const itemExpanded=!!dropsExpanded['online_'+ck];
 
         // Build sizes breakdown per color from entries — round all quantities
         const allColorSizes={};
@@ -864,7 +866,7 @@ function renderOnlineList(date){
         // Filter by saved colors for this drop date
         const savedColors=getSavedColors(item,date);
         const colorRows=savedColors
-          ? allColorRows.filter(([key,{display}])=>savedColors.some(sc=>sc.toLowerCase()===key))
+          ? allColorRows.filter(([key])=>savedColors.some(sc=>sc.toLowerCase()===key))
           : allColorRows;
         const unassignedCount=savedColors?allColorRows.length-colorRows.length:0;
 
@@ -874,7 +876,13 @@ function renderOnlineList(date){
           ? `<span class="online-no-pl-badge">עדיין אין PL</span>`
           : (shipNames||[]).map(sn=>`<span class="all-ship-badge">${sn}</span>`).join(' ');
 
-        // Collapsible sizes — each color is a row, sizes listed clearly below it
+        // Show "duplicate code" warning if same ADD code has multiple name variants
+        const sameCodeVariants=Object.values(getAllItemsAcrossShipments()).filter(x=>x.item===item&&x.compositeKey!==compositeKey&&!x.isManual);
+        const dupWarning=sameCodeVariants.length>0
+          ? `<span style="font-size:10px;color:#dc2626;background:#fef2f2;border:1px solid #fca5a5;border-radius:4px;padding:2px 6px;font-weight:600">⚠ קוד כפול: ${sameCodeVariants.map(x=>x.data.styleName||'?').join(' / ')}</span>`
+          : '';
+
+        // Collapsible sizes
         const sizesHTML=colorRows.length>0?`
           <div style="padding:0 14px 12px">
             ${colorRows.map(([colorKey,{display,qty,sizes}])=>{
@@ -897,12 +905,13 @@ function renderOnlineList(date){
           `<div style="padding:8px 14px 12px;font-size:12px;color:#aaa">אין נתוני מידות (ללא PL)</div>`;
 
         return `<div class="online-item-card ${uploaded?'uploaded':''} ${!hasShipments?'no-pl':''}">
-          <div class="online-item-header" style="cursor:pointer" onclick="dropsExpanded['online_${item}']=!dropsExpanded['online_${item}'];renderOnlineList('${date}')">
+          <div class="online-item-header" style="cursor:pointer" onclick="dropsExpanded['online_${ck}']=!dropsExpanded['online_${ck}'];renderOnlineList('${date}')">
             <div style="flex:1;min-width:0">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
                 <span style="font-size:13px;color:#aaa">${itemExpanded?'▲':'▼'}</span>
                 <span class="online-item-code">${item}</span>
                 <span class="online-item-name">${data.styleName||''}</span>
+                ${dupWarning}
               </div>
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                 ${shipBadgesHtml}
@@ -913,7 +922,7 @@ function renderOnlineList(date){
             </div>
             ${hasShipments
               ? `<button class="online-upload-btn ${uploaded?'done':''}"
-                  onclick="event.stopPropagation();${uploaded?`unmarkOnlineUpload('${item}')`:`markOnlineUpload('${item}','${date}')`}">
+                  onclick="event.stopPropagation();${uploaded?`unmarkOnlineUpload('${ck}')`:`markOnlineUpload('${ck}','${date}')`}">
                   ${uploaded?'✓ הועלה':'עלה לאתר ✓'}
                 </button>`
               : `<button disabled style="background:#e2e8f0;color:#94a3b8;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:not-allowed">ללא PL</button>`
@@ -929,17 +938,17 @@ function renderOnlineList(date){
     renderSection(kids,'Kids','👧');
 }
 
-async function markOnlineUpload(item,date){
-  await db.ref('onlineUploaded/'+fkey(item)).set(true);
-  notify('✓ '+item+' סומן כ"הועלה לאתר"');
+async function markOnlineUpload(ck,date){
+  await db.ref('onlineUploaded/'+fkey(ck)).set(true);
+  notify('✓ פריט סומן כ"הועלה לאתר"');
   renderOnlineList(date);
 }
 
-async function unmarkOnlineUpload(item){
-  const date=dropDates[fkey(item)];
-  await db.ref('onlineUploaded/'+fkey(item)).remove();
+async function unmarkOnlineUpload(ck){
+  await db.ref('onlineUploaded/'+fkey(ck)).remove();
   notify('✓ סימון הוסר');
-  if(date)renderOnlineList(date);
+  const sel=document.getElementById('online-date-select');
+  if(sel&&sel.value)renderOnlineList(sel.value);
 }
 
 function exportOnline(){
@@ -1111,7 +1120,8 @@ function showDrops(){
 
 // ===== Cross-shipment item helpers (for Drops "+" panel) =====
 function getAllItemsAcrossShipments(){
-  // item code -> { item, data:{styleName,ctns:Set,entries:[]}, shipNames:[...], shipName, shipIds:[...] }
+  // KEY = item code + '|||' + styleName (normalized lowercase)
+  // This means ADD0176/Oriana and ADD0176/Dana Top are two separate entries
   const result={};
 
   // 1. Real shipments from PL files
@@ -1119,33 +1129,40 @@ function getAllItemsAcrossShipments(){
     const entries=ship.entries||[];
     const itemMap=groupByItem(entries);
     Object.entries(itemMap).forEach(([item,data])=>{
-      if(!result[item]){
-        result[item]={item,data:{item:data.item,styleName:data.styleName,ctns:new Set([...data.ctns]),entries:[...data.entries]},shipNames:[ship.name],shipName:ship.name,shipIds:[shipId]};
+      const nameKey=(data.styleName||'').trim().toLowerCase();
+      const key=item+'|||'+nameKey; // unique key per code+name combo
+      if(!result[key]){
+        result[key]={
+          item,
+          compositeKey:key,
+          data:{item:data.item,styleName:data.styleName,ctns:new Set([...data.ctns]),entries:[...data.entries]},
+          shipNames:[ship.name],shipName:ship.name,shipIds:[shipId]
+        };
       } else {
-        data.ctns.forEach(c=>result[item].data.ctns.add(c));
-        result[item].data.entries.push(...data.entries);
-        if(!result[item].data.styleName&&data.styleName)result[item].data.styleName=data.styleName;
-        if(!result[item].shipNames.includes(ship.name))result[item].shipNames.push(ship.name);
-        if(!result[item].shipIds.includes(shipId))result[item].shipIds.push(shipId);
+        data.ctns.forEach(c=>result[key].data.ctns.add(c));
+        result[key].data.entries.push(...data.entries);
+        if(!result[key].data.styleName&&data.styleName)result[key].data.styleName=data.styleName;
+        if(!result[key].shipNames.includes(ship.name))result[key].shipNames.push(ship.name);
+        if(!result[key].shipIds.includes(shipId))result[key].shipIds.push(shipId);
       }
     });
   });
 
-  // 2. Manual items (added without PL) — only included if NOT already found in a real shipment
-  // This gives auto-connection: once a PL arrives with this item, the PL wins automatically.
-  Object.entries(manualItems).forEach(([key,mi])=>{
+  // 2. Manual items — keyed by item code only (no style name from PL)
+  Object.entries(manualItems).forEach(([k,mi])=>{
     const item=mi.item;
-    if(!result[item]){
-      result[item]={
+    const key=item+'|||manual';
+    // Only add if no real PL entry exists for this item code (any name)
+    const hasRealPL=Object.keys(result).some(rk=>rk.startsWith(item+'|||')&&!rk.endsWith('|||manual'));
+    if(!hasRealPL&&!result[key]){
+      result[key]={
         item,
+        compositeKey:key,
         data:{item,styleName:mi.styleName||'',ctns:new Set(),entries:[]},
-        shipNames:['עדיין אין PL'],
-        shipName:'עדיין אין PL',
-        shipIds:[],
+        shipNames:['עדיין אין PL'],shipName:'עדיין אין PL',shipIds:[],
         isManual:true
       };
     }
-    // If item already in result from a real PL — do nothing (PL wins, badge updates automatically)
   });
 
   return result;
@@ -1157,12 +1174,12 @@ function shipBadges(shipNames){
 }
 
 function getItemsWithDropDates(){
-  // Every item (from ANY shipment) that has a drop date set — regardless of completion status
+  // Every item variant (from ANY shipment) that has a drop date set
   const allItems=getAllItemsAcrossShipments();
   const result=[];
-  Object.values(allItems).forEach(({item,data,shipNames})=>{
+  Object.values(allItems).forEach(({item,compositeKey,data,shipNames,isManual})=>{
     const date=dropDates[fkey(item)];
-    if(date)result.push({item,data,shipNames,date});
+    if(date)result.push({item,compositeKey,data,shipNames,isManual:!!isManual,date});
   });
   return result;
 }
