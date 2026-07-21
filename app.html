@@ -453,6 +453,7 @@ let dropDates={};
 let dropDateList={};  // drop dates that exist even with no items yet (key=date)
 let dropsExpanded={};
 let dropImages={};  // itemCode -> base64 image
+let dropColors={};   // selected colors per item per date: fkey(item) -> { fkey(date): [color,...] }
 let manualItems={};  // items added manually without a PL: fkey(item) -> {item,styleName}
 let onlineUploaded={};  // items marked as uploaded to site: fkey(item) -> true
 let dropAddPanelOpen=false, dropAddDate='', dropAddSearch='';  // "+" add-to-drop panel state
@@ -843,23 +844,30 @@ function renderOnlineList(date){
         const itemExpanded=!!dropsExpanded['online_'+item];
 
         // Build sizes breakdown per color from entries — round all quantities
-        const colorSizes={};
+        const allColorSizes={};
         (data.entries||[]).forEach(e=>{
           const color=(e.color||'').trim();
-          const colorKey=color.toLowerCase(); // normalize key for grouping (black = Black)
-          if(!colorSizes[colorKey])colorSizes[colorKey]={display:color,qty:0,sizes:{}};
-          // Prefer Title Case display name over all-lowercase
+          const colorKey=color.toLowerCase();
+          if(!allColorSizes[colorKey])allColorSizes[colorKey]={display:color,qty:0,sizes:{}};
           if(color&&color[0]===color[0].toUpperCase()&&color[0]!==color[0].toLowerCase())
-            colorSizes[colorKey].display=color;
-          colorSizes[colorKey].qty+=Math.round(parseFloat(e.qty)||0);
+            allColorSizes[colorKey].display=color;
+          allColorSizes[colorKey].qty+=Math.round(parseFloat(e.qty)||0);
           Object.entries(e.sizes||{}).forEach(([s,q])=>{
             const sClean=s.trim().toLowerCase();
             if(sClean==='amount'||sClean==='total'||sClean==='qty')return;
             const qn=Math.round(parseFloat(q)||0);
-            if(qn>0)colorSizes[colorKey].sizes[s]=(colorSizes[colorKey].sizes[s]||0)+qn;
+            if(qn>0)allColorSizes[colorKey].sizes[s]=(allColorSizes[colorKey].sizes[s]||0)+qn;
           });
         });
-        const colorRows=Object.entries(colorSizes).filter(([c])=>c).sort(([a],[b])=>a.localeCompare(b));
+        const allColorRows=Object.entries(allColorSizes).filter(([c])=>c).sort(([a],[b])=>a.localeCompare(b));
+
+        // Filter by saved colors for this drop date
+        const savedColors=getSavedColors(item,date);
+        const colorRows=savedColors
+          ? allColorRows.filter(([key,{display}])=>savedColors.some(sc=>sc.toLowerCase()===key))
+          : allColorRows;
+        const unassignedCount=savedColors?allColorRows.length-colorRows.length:0;
+
         const totalQty=colorRows.reduce((s,[,{qty}])=>s+qty,0);
 
         const shipBadgesHtml=isManual
@@ -899,6 +907,7 @@ function renderOnlineList(date){
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                 ${shipBadgesHtml}
                 ${totalQty?`<span style="font-size:12px;color:#888;font-weight:600">סה"כ: ${totalQty} יח'</span>`:''}
+                ${unassignedCount>0?`<span style="font-size:11px;color:#f59e0b;background:#fffbeb;border:1px solid #fcd34d;border-radius:4px;padding:2px 6px;font-weight:600">⚠ יש עוד ${unassignedCount} צבע${unassignedCount>1?'ים':''} שלא משויך${unassignedCount>1?'ים':''} לדרופ זה</span>`:''}
                 ${uploaded?'<span style="font-size:12px;color:#16a34a;font-weight:700">✓ הועלה לאתר</span>':''}
               </div>
             </div>
@@ -1190,23 +1199,139 @@ function renderDropAddPanel(){
   renderDropAddResults();
 }
 
-function dropResultRowHTML(item,data,shipNames,activeDate,addCall,removeCall){
+// Helper: get saved colors for an item in a specific drop date
+function getSavedColors(item, date){
+  const ic=dropColors[fkey(item)];
+  if(!ic)return null; // null = no color selection saved (show all)
+  const dc=ic[fkey(date)];
+  if(!dc)return null;
+  // Firebase stores array or object
+  return Array.isArray(dc)?dc:Object.values(dc);
+}
+
+// Helper: save color selection for item+date
+async function saveDropColors(item, date, colors){
+  if(!colors||colors.length===0){
+    await db.ref('dropColors/'+fkey(item)+'/'+fkey(date)).remove();
+  } else {
+    await db.ref('dropColors/'+fkey(item)+'/'+fkey(date)).set(colors);
+  }
+}
+
+// Color picker HTML for a search result row
+function colorPickerHTML(item, date, allColors, context){
+  // context: 'add' (not yet in drop) or 'edit' (already in drop)
+  const saved=getSavedColors(item,date);
+  const id=`cpick-${fkey(item)}-${fkey(date)}-${context}`;
+  return `<div id="${id}" style="margin-top:6px;padding:6px 8px;background:#f5f3ff;border-radius:8px">
+    <div style="font-size:11px;color:#7c3aed;font-weight:700;margin-bottom:5px">בחרי צבעים לדרופ זה:</div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px">
+      ${allColors.map(color=>{
+        const checked=!saved||saved.includes(color);
+        return `<label style="display:flex;align-items:center;gap:4px;cursor:pointer;background:#fff;border:1px solid ${checked?'#7c3aed':'#ddd'};border-radius:6px;padding:4px 8px;font-size:12px">
+          <input type="checkbox" data-item="${item}" data-date="${date}" data-color="${color}" data-ctx="${context}"
+            ${checked?'checked':''}
+            onchange="onColorPickChange('${item}','${date}','${context}')"
+            style="cursor:pointer">
+          ${color}
+        </label>`;
+      }).join('')}
+    </div>
+    <div style="display:flex;gap:6px">
+      <button onclick="selectAllColors('${item}','${date}','${context}')" style="font-size:11px;border:1px solid #ddd;border-radius:6px;padding:3px 9px;cursor:pointer;background:#f5f5f5">כולם</button>
+      <button onclick="clearAllColors('${item}','${date}','${context}')" style="font-size:11px;border:1px solid #ddd;border-radius:6px;padding:3px 9px;cursor:pointer;background:#f5f5f5">נקה</button>
+    </div>
+  </div>`;
+}
+
+function getCheckedColors(item, date, context){
+  const id=`cpick-${fkey(item)}-${fkey(date)}-${context}`;
+  const el=document.getElementById(id);
+  if(!el)return null;
+  const boxes=[...el.querySelectorAll('input[type=checkbox]')];
+  return boxes.filter(b=>b.checked).map(b=>b.dataset.color);
+}
+
+function onColorPickChange(item,date,context){
+  // re-render checkbox borders
+  const id=`cpick-${fkey(item)}-${fkey(date)}-${context}`;
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.querySelectorAll('input[type=checkbox]').forEach(b=>{
+    const lbl=b.closest('label');
+    if(lbl)lbl.style.borderColor=b.checked?'#7c3aed':'#ddd';
+  });
+}
+
+function selectAllColors(item,date,context){
+  const id=`cpick-${fkey(item)}-${fkey(date)}-${context}`;
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.querySelectorAll('input[type=checkbox]').forEach(b=>{b.checked=true;const l=b.closest('label');if(l)l.style.borderColor='#7c3aed';});
+}
+
+function clearAllColors(item,date,context){
+  const id=`cpick-${fkey(item)}-${fkey(date)}-${context}`;
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.querySelectorAll('input[type=checkbox]').forEach(b=>{b.checked=false;const l=b.closest('label');if(l)l.style.borderColor='#ddd';});
+}
+
+// State: which items have the color picker expanded in search results
+let colorPickerOpen={};  // key = item+'|'+date
+
+function dropResultRowHTML(item,data,shipNames,activeDate,addFn,removeFn){
   const colors=[...new Set((data.entries||[]).map(e=>e.color).filter(Boolean))].sort();
   const currentDate=dropDates[fkey(item)];
   const addedHere=currentDate&&currentDate===activeDate;
   const addedOther=currentDate&&currentDate!==activeDate;
-  return `<div style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid #f5f5f5;flex-wrap:wrap">
+  const savedColors=getSavedColors(item,activeDate);
+  const pickerKey=item+'|'+activeDate;
+  const pickerOpen=!!colorPickerOpen[pickerKey];
+
+  return `<div style="padding:8px 4px;border-bottom:1px solid #f5f5f5">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <div style="flex:1;min-width:0">
         <span style="font-weight:700;font-size:13px">${item}</span>
         <span style="font-size:12px;color:#666;margin:0 6px">${data.styleName||''}</span>
-        <span style="font-size:11px;color:#aaa">${colors.join(' · ')}</span>
         ${shipBadges(shipNames)}
         ${addedOther?`<span style="font-size:11px;color:#f59e0b;font-weight:600">📅 ${formatDate(currentDate)}</span>`:''}
+        ${addedHere&&savedColors?`<span style="font-size:11px;color:#7c3aed">${savedColors.join(' · ')}</span>`:''}
+        ${addedHere&&!savedColors&&colors.length?`<span style="font-size:11px;color:#aaa">${colors.join(' · ')}</span>`:''}
       </div>
       ${addedHere
-        ? `<button onclick="${removeCall}" style="background:#e8f5e9;border:1px solid #81c784;border-radius:7px;padding:6px 12px;font-size:12px;cursor:pointer;color:#2e7d32;font-weight:600;white-space:nowrap">✓ נוסף · הסר</button>`
-        : `<button onclick="${addCall}" style="background:#7c3aed;border:none;border-radius:7px;padding:6px 12px;font-size:12px;cursor:pointer;color:#fff;font-weight:600;white-space:nowrap">+ הוסף</button>`}
-    </div>`;
+        ? `<button onclick="colorPickerOpen['${pickerKey}']=!colorPickerOpen['${pickerKey}'];renderDropAddResults()" style="background:#ede9fe;border:1px solid #7c3aed;border-radius:7px;padding:6px 10px;font-size:12px;cursor:pointer;color:#7c3aed;font-weight:600">✏️ צבעים</button>
+           <button onclick="${removeFn}" style="background:#fef2f2;border:1px solid #fca5a5;border-radius:7px;padding:6px 10px;font-size:12px;cursor:pointer;color:#dc2626;font-weight:600">✕ הסר</button>`
+        : colors.length>0
+          ? `<button onclick="colorPickerOpen['${pickerKey}']=true;renderDropAddResults()" style="background:#7c3aed;border:none;border-radius:7px;padding:6px 12px;font-size:12px;cursor:pointer;color:#fff;font-weight:600">+ הוסף</button>`
+          : `<button onclick="${addFn}" style="background:#7c3aed;border:none;border-radius:7px;padding:6px 12px;font-size:12px;cursor:pointer;color:#fff;font-weight:600">+ הוסף</button>`
+      }
+    </div>
+    ${pickerOpen&&colors.length>0?`
+      ${colorPickerHTML(item,activeDate,colors,'search')}
+      ${!addedHere?`<button onclick="confirmAddWithColors('${item}','${activeDate}')" style="margin-top:8px;background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:700;width:100%">✓ הוסף לדרופ עם הצבעים שנבחרו</button>`:''}
+      ${addedHere?`<button onclick="confirmEditColors('${item}','${activeDate}')" style="margin-top:8px;background:#16a34a;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:700;width:100%">💾 שמור שינוי צבעים</button>`:''}
+    `:''}
+  </div>`;
+}
+
+async function confirmAddWithColors(item,date){
+  const colors=getCheckedColors(item,date,'search');
+  await db.ref('dropDates/'+fkey(item)).set(date);
+  await db.ref('dropDateList/'+date).set(true);
+  if(colors&&colors.length>0) await saveDropColors(item,date,colors);
+  colorPickerOpen[item+'|'+date]=false;
+  notify('✓ '+item+' נוסף לדרופ עם '+( colors&&colors.length?colors.length:'כל')+' צבעים');
+  renderDropAddResults();
+}
+
+async function confirmEditColors(item,date){
+  const colors=getCheckedColors(item,date,'search');
+  if(colors&&colors.length>0) await saveDropColors(item,date,colors);
+  else await saveDropColors(item,date,null);
+  colorPickerOpen[item+'|'+date]=false;
+  notify('✓ צבעים עודכנו ל-'+item);
+  renderDropAddResults();
 }
 
 function matchingDropItems(q){
@@ -1246,15 +1371,17 @@ async function saveNewDropDate(){
 
 async function addItemToDropDate(item){
   if(!dropAddDate){notify('בחרי תאריך דרופ קודם','error');return;}
-  // Shared dropDates field -> also updates the date shown in Storage Locations
   await db.ref('dropDates/'+fkey(item)).set(dropAddDate);
   await db.ref('dropDateList/'+dropAddDate).set(true);
-  notify('✓ '+item+' נוסף לדרופ '+formatDate(dropAddDate)+' (עודכן גם ב-Storage Locations)');
+  colorPickerOpen[item+'|'+dropAddDate]=false;
+  notify('✓ '+item+' נוסף לדרופ '+formatDate(dropAddDate));
   renderDropAddResults();
 }
 
 async function removeItemFromDropQuick(item){
   await db.ref('dropDates/'+fkey(item)).remove();
+  await saveDropColors(item,dropAddDate,null);
+  colorPickerOpen[item+'|'+dropAddDate]=false;
   notify('✓ '+item+' הוסר מהדרופ');
   renderDropAddResults();
 }
@@ -1274,20 +1401,102 @@ function renderDropCardResults(date){
   const list=matchingDropItems(q);
   if(list.length===0){el.innerHTML='<div style="font-size:12px;color:#aaa;padding:6px">לא נמצאו פריטים תואמים</div>';return;}
   el.innerHTML=list.slice(0,60).map(({item,data,shipNames})=>
-    dropResultRowHTML(item,data,shipNames,date,`addItemToThisDrop('${item}','${date}')`,`removeItemFromThisDrop('${item}')`)
+    dropResultRowHTMLCard(item,data,shipNames,date)
   ).join('');
+}
+
+// Separate version for in-card search (same logic, different context key)
+function dropResultRowHTMLCard(item,data,shipNames,date){
+  const colors=[...new Set((data.entries||[]).map(e=>e.color).filter(Boolean))].sort();
+  const currentDate=dropDates[fkey(item)];
+  const addedHere=currentDate&&currentDate===date;
+  const addedOther=currentDate&&currentDate!==date;
+  const savedColors=getSavedColors(item,date);
+  const pickerKey=item+'|card|'+date;
+  const pickerOpen=!!colorPickerOpen[pickerKey];
+
+  return `<div style="padding:8px 4px;border-bottom:1px solid #f5f5f5">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <div style="flex:1;min-width:0">
+        <span style="font-weight:700;font-size:13px">${item}</span>
+        <span style="font-size:12px;color:#666;margin:0 6px">${data.styleName||''}</span>
+        ${shipBadges(shipNames)}
+        ${addedOther?`<span style="font-size:11px;color:#f59e0b;font-weight:600">📅 ${formatDate(currentDate)}</span>`:''}
+        ${addedHere&&savedColors?`<span style="font-size:11px;color:#7c3aed">${savedColors.join(' · ')}</span>`:''}
+      </div>
+      ${addedHere
+        ? `<button onclick="colorPickerOpen['${pickerKey}']=!colorPickerOpen['${pickerKey}'];renderDropCardResults('${date}')" style="background:#ede9fe;border:1px solid #7c3aed;border-radius:7px;padding:6px 10px;font-size:12px;cursor:pointer;color:#7c3aed;font-weight:600">✏️ צבעים</button>
+           <button onclick="removeItemFromThisDrop('${item}')" style="background:#fef2f2;border:1px solid #fca5a5;border-radius:7px;padding:6px 10px;font-size:12px;cursor:pointer;color:#dc2626;font-weight:600">✕</button>`
+        : `<button onclick="colorPickerOpen['${pickerKey}']=true;renderDropCardResults('${date}')" style="background:#7c3aed;border:none;border-radius:7px;padding:6px 12px;font-size:12px;cursor:pointer;color:#fff;font-weight:600">+ הוסף</button>`
+      }
+    </div>
+    ${pickerOpen&&colors.length>0?`
+      <div id="cpick-${fkey(item)}-${fkey(date)}-card" style="margin-top:6px;padding:6px 8px;background:#f5f3ff;border-radius:8px">
+        <div style="font-size:11px;color:#7c3aed;font-weight:700;margin-bottom:5px">בחרי צבעים לדרופ זה:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px">
+          ${colors.map(color=>{
+            const saved2=getSavedColors(item,date);
+            const checked=!saved2||saved2.includes(color);
+            return `<label style="display:flex;align-items:center;gap:4px;cursor:pointer;background:#fff;border:1px solid ${checked?'#7c3aed':'#ddd'};border-radius:6px;padding:4px 8px;font-size:12px">
+              <input type="checkbox" data-item="${item}" data-date="${date}" data-color="${color}" data-ctx="card"
+                ${checked?'checked':''} style="cursor:pointer"
+                onchange="onColorPickChange('${item}','${date}','card')">
+              ${color}
+            </label>`;
+          }).join('')}
+        </div>
+      </div>
+      ${!addedHere?`<button onclick="confirmCardAddWithColors('${item}','${date}')" style="margin-top:8px;background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:700;width:100%">✓ הוסף לדרופ עם הצבעים שנבחרו</button>`:''}
+      ${addedHere?`<button onclick="confirmCardEditColors('${item}','${date}')" style="margin-top:8px;background:#16a34a;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:700;width:100%">💾 שמור שינוי צבעים</button>`:''}
+    `:''}
+  </div>`;
+}
+
+async function confirmCardAddWithColors(item,date){
+  const el=document.getElementById('cpick-'+fkey(item)+'-'+fkey(date)+'-card');
+  const colors=el?[...el.querySelectorAll('input:checked')].map(b=>b.dataset.color):[];
+  await db.ref('dropDates/'+fkey(item)).set(date);
+  await db.ref('dropDateList/'+date).set(true);
+  if(colors.length>0) await saveDropColors(item,date,colors);
+  colorPickerOpen[item+'|card|'+date]=false;
+  notify('✓ '+item+' נוסף לדרופ עם '+colors.length+' צבעים');
+  renderDropCardResults(date);
+}
+
+async function confirmCardEditColors(item,date){
+  const el=document.getElementById('cpick-'+fkey(item)+'-'+fkey(date)+'-card');
+  const colors=el?[...el.querySelectorAll('input:checked')].map(b=>b.dataset.color):[];
+  await saveDropColors(item,date,colors.length>0?colors:null);
+  colorPickerOpen[item+'|card|'+date]=false;
+  notify('✓ צבעים עודכנו ל-'+item);
+  renderDropCardResults(date);
 }
 
 async function addItemToThisDrop(item,date){
   await db.ref('dropDates/'+fkey(item)).set(date);
   await db.ref('dropDateList/'+date).set(true);
-  notify('✓ '+item+' נוסף לדרופ '+formatDate(date)+' (עודכן גם ב-Storage Locations)');
-  // dropDates listener re-renders + restores focus to the card search
+  notify('✓ '+item+' נוסף לדרופ '+formatDate(date));
 }
 
 async function removeItemFromThisDrop(item){
+  const date=dropDates[fkey(item)];
   await db.ref('dropDates/'+fkey(item)).remove();
+  if(date) await saveDropColors(item,date,null);
   notify('✓ '+item+' הוסר מהדרופ');
+}
+
+async function saveDropItemColors(item,date,pickerKey){
+  const allCbs=[...document.querySelectorAll(`input[id^="droped-${fkey(item)}-"]`)];
+  const colors=allCbs.filter(b=>b.checked).map(b=>b.id.replace('droped-'+fkey(item)+'-','').replace(/-/g,' '));
+  // Restore original color names from allColors
+  const allItems=getAllItemsAcrossShipments();
+  const data=allItems[item]?.data;
+  const allColors=data?[...new Set(data.entries.map(e=>e.color).filter(Boolean))].sort():[];
+  const selected=allColors.filter(c=>allCbs.some(b=>b.checked&&b.id==='droped-'+fkey(item)+'-'+fkey(c)));
+  await saveDropColors(item,date,selected.length>0?selected:null);
+  colorPickerOpen[pickerKey]=false;
+  notify('✓ צבעים עודכנו ל-'+item);
+  renderDrops();
 }
 
 async function deleteEmptyDrop(date){
@@ -1398,7 +1607,10 @@ function renderDrops(){
       if(list.length===0)return'';
       return `<div class="drops-section-title" style="${borderTop?'border-top:2px solid #f0f0f0;margin-top:4px':''}">${emoji} ${title} (${list.length})</div>`+
         list.map(({item,data,shipNames})=>{
-          const colors=[...new Set(data.entries.map(e=>e.color).filter(Boolean))].sort();
+          const allColors=[...new Set(data.entries.map(e=>e.color).filter(Boolean))].sort();
+          const savedColors=getSavedColors(item,date);
+          const displayColors=savedColors||allColors;
+          const hasUnassigned=savedColors&&allColors.some(c=>!savedColors.includes(c));
           const imgKey=fkey(item);
           const img=dropImages[imgKey]||'';
           const imgOpen=dropsExpanded['img_'+item]===true;
@@ -1406,18 +1618,37 @@ function renderDrops(){
           const badgeHtml=isManual
             ? `<span style="font-size:10px;color:#c2410c;background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;padding:2px 6px;font-weight:600">עדיין אין PL</span>`
             : shipBadges(shipNames);
+          const editPickerKey='drop|'+item+'|'+date;
+          const editOpen=!!colorPickerOpen[editPickerKey];
           return `<div>
             <div class="drops-item-row">
               <div style="flex:1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer" onclick="toggleDropItem('${item}')">
                 <span class="drops-item-code">${item}</span>
                 <span class="drops-item-name">${data.styleName||''}</span>
-                ${colors.length?`<span class="drops-item-colors">${colors.join(' · ')}</span>`:''}
+                ${displayColors.length?`<span class="drops-item-colors">${displayColors.join(' · ')}</span>`:''}
+                ${hasUnassigned?`<span style="font-size:10px;color:#f59e0b;background:#fffbeb;border:1px solid #fcd34d;border-radius:4px;padding:2px 5px;font-weight:600">+${allColors.length-savedColors.length} עוד</span>`:''}
                 ${badgeHtml}
                 ${img?'<span style="font-size:11px;color:#7c3aed;font-weight:600">📷</span>':''}
                 <span style="font-size:11px;color:#ccc">${imgOpen?'▲':'▼'}</span>
               </div>
-              <button onclick="event.stopPropagation();removeItemFromDrop('${item}')" style="background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;color:#dc2626;white-space:nowrap;flex-shrink:0">✕ הסר</button>
+              <div style="display:flex;gap:5px;flex-shrink:0">
+                ${allColors.length>0?`<button onclick="event.stopPropagation();colorPickerOpen['${editPickerKey}']=!colorPickerOpen['${editPickerKey}'];renderDrops()" style="background:#ede9fe;border:1px solid #7c3aed;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;color:#7c3aed;font-weight:600">✏️ צבעים</button>`:''}
+                <button onclick="event.stopPropagation();removeItemFromDrop('${item}')" style="background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;color:#dc2626;white-space:nowrap">✕ הסר</button>
+              </div>
             </div>
+            ${editOpen&&allColors.length>0?`<div style="padding:8px 16px 10px;background:#faf9ff;border-top:1px solid #f0f0f0">
+              <div style="font-size:11px;color:#7c3aed;font-weight:700;margin-bottom:6px">בחרי צבעים לדרופ ${formatDate(date)}:</div>
+              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">
+                ${allColors.map(color=>{
+                  const checked=!savedColors||savedColors.includes(color);
+                  return `<label style="display:flex;align-items:center;gap:4px;cursor:pointer;background:#fff;border:1px solid ${checked?'#7c3aed':'#ddd'};border-radius:6px;padding:4px 9px;font-size:12px">
+                    <input type="checkbox" id="droped-${fkey(item)}-${fkey(color)}" ${checked?'checked':''} style="cursor:pointer"> ${color}
+                  </label>`;
+                }).join('')}
+              </div>
+              <button onclick="saveDropItemColors('${item}','${date}','${editPickerKey}')" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:7px 16px;font-size:13px;cursor:pointer;font-weight:700">💾 שמור</button>
+              <button onclick="colorPickerOpen['${editPickerKey}']=false;renderDrops()" style="background:#f5f5f5;border:1px solid #ddd;border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;margin-right:6px">ביטול</button>
+            </div>`:''}
             ${imgOpen?`<div class="drop-img-section">
               ${img?`<img class="drop-img-preview" src="${img}" alt="${item}">`:
                 '<div style="font-size:12px;color:#aaa;margin-bottom:8px">אין תמונה עדיין</div>'}
@@ -2121,6 +2352,15 @@ function startDataListeners(){
       const sel=document.getElementById('online-date-select');
       if(sel&&sel.value)renderOnlineList(sel.value);
       renderOnlineDateSelect();
+    }
+  });
+
+  db.ref('dropColors').on('value',snap=>{
+    dropColors=snap.val()||{};
+    if(document.getElementById('page-drops').classList.contains('active'))renderDrops();
+    if(document.getElementById('page-online').classList.contains('active')){
+      const sel=document.getElementById('online-date-select');
+      if(sel&&sel.value)renderOnlineList(sel.value);
     }
   });
 }
