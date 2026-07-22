@@ -434,6 +434,13 @@ tr.has-loc-row td:first-child::after{content:' 📍';font-size:11px}
   <select class="online-drop-select" id="online-date-select" onchange="onOnlineDateChange(this.value)">
     <option value="">-- בחרי תאריך דרופ --</option>
   </select>
+  <div style="background:#fff;border-radius:10px;padding:8px 12px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.07);display:flex;gap:8px;align-items:center">
+    <input id="online-search-input" class="search-input" type="text"
+      placeholder="חיפוש לפי שם דגם או מספר SKU (לדוג׳ ADD0494 / Nolita Shoes)..."
+      oninput="renderOnlineListFiltered()"
+      style="flex:1">
+    <button onclick="document.getElementById('online-search-input').value='';renderOnlineListFiltered()" style="background:none;border:none;cursor:pointer;color:#aaa;font-size:17px">✕</button>
+  </div>
   <div id="online-list"></div>
 </div>
 </div>
@@ -835,6 +842,13 @@ function getOnlineItemsForDate(date){
   return result;
 }
 
+function renderOnlineListFiltered(){
+  const sel=document.getElementById('online-date-select');
+  const date=sel?sel.value:'';
+  if(!date)return;
+  renderOnlineList(date);
+}
+
 function renderOnlineList(date){
   const items=getOnlineItemsForDate(date);
   const el=document.getElementById('online-list');
@@ -846,12 +860,27 @@ function renderOnlineList(date){
     return;
   }
 
-  const uploadedCount=items.filter(({compositeKey})=>onlineUploaded[fkey(compositeKey||'')]).length;
-  subtitle.textContent=`${formatDate(date)} · ${items.length} פריטים · ${uploadedCount} הועלו`;
+  const searchQ=(document.getElementById('online-search-input')?.value||'').trim().toLowerCase();
 
-  // Section headers
-  const women=items.filter(({item})=>!item.startsWith('LADD'));
-  const kids=items.filter(({item})=>item.startsWith('LADD'));
+  const uploadedCount=items.filter(({compositeKey})=>onlineUploaded[fkey(compositeKey||'')]).length;
+
+  // Apply search filter
+  const filtered=searchQ
+    ? items.filter(({item,data})=>
+        item.toLowerCase().includes(searchQ)||
+        (data.styleName||'').toLowerCase().includes(searchQ))
+    : items;
+
+  subtitle.textContent=`${formatDate(date)} · ${items.length} פריטים · ${uploadedCount} הועלו`+(searchQ&&filtered.length!==items.length?` · ${filtered.length} תוצאות חיפוש`:'');
+
+  // Section headers — use filtered list
+  const women=filtered.filter(({item})=>!item.startsWith('LADD'));
+  const kids=filtered.filter(({item})=>item.startsWith('LADD'));
+
+  if(filtered.length===0){
+    el.innerHTML=`<div class="no-results">לא נמצאו פריטים תואמים ל-"${searchQ}"</div>`;
+    return;
+  }
 
   const renderSection=(list,title,emoji)=>{
     if(!list.length)return'';
@@ -864,27 +893,36 @@ function renderOnlineList(date){
 
         // ===== Size translation maps =====
         const isKids=item.startsWith('LADD');
-        const isKidsShoes=isKids&&(data.styleName||'').toLowerCase().includes('shoes');
+        const isShoes=(data.styleName||'').toLowerCase().includes('shoes');
+        const isWomenShoes=!isKids&&isShoes;
+        const isKidsShoes=isKids&&isShoes;
 
-        // Column name → display label
+        // Women shoes: P=35, OS=36, OS+=37, XXS=38, XS=39, S=40
+        const WOMEN_SHOES_SIZES={
+          'p':'35','os':'36','os+':'37',
+          'xxs':'38','xs':'39','s':'40'
+        };
+        // Kids shoes: P=23, OS=24, OS+=25, XXS=26, XS=27, S=28, M=29, L=30, XL=31, XXL=32, 3XL=33
+        const KIDS_SHOES_SIZES={
+          'p':'23','os':'24','os+':'25',
+          'xxs':'26','xs':'27','s':'28',
+          'm':'29','l':'30','xl':'31',
+          'xxl':'32','3xl':'33'
+        };
+        // Kids clothing sizes
         const KIDS_SIZES={
           'p':'1/2','os':'2/3','os+':'3/4',
           'xxs':'4/5','xs':'5/6','s':'6/7',
           'm':'7/8','l':'8/9','xl':'9/10',
           'xxl':'10/11'
         };
-        const KIDS_SHOES_SIZES={
-          'p':'35','os':'36','os+':'37',
-          'xxs':'38','xs':'39','s':'40',
-          'm':'29','l':'30','xl':'31',
-          'xxl':'32','3xl':'33'
-        };
 
         function translateSize(s){
-          if(!isKids)return s; // women — show as-is
           const key=s.trim().toLowerCase();
+          if(isWomenShoes)return WOMEN_SHOES_SIZES[key]||s;
           if(isKidsShoes)return KIDS_SHOES_SIZES[key]||s;
-          return KIDS_SIZES[key]||s;
+          if(isKids)return KIDS_SIZES[key]||s;
+          return s; // women non-shoes — show as-is
         }
 
         // Build sizes breakdown per color from entries — round all quantities
@@ -899,9 +937,10 @@ function renderOnlineList(date){
           Object.entries(e.sizes||{}).forEach(([s,q])=>{
             const sClean=s.trim().toLowerCase();
             if(sClean==='amount'||sClean==='total'||sClean==='qty')return;
-            // For kids: skip columns that don't belong to their size chart
-            if(isKids&&!isKidsShoes&&!KIDS_SIZES[sClean])return;
+            // Skip columns not in the relevant size chart
+            if(isWomenShoes&&!WOMEN_SHOES_SIZES[sClean])return;
             if(isKidsShoes&&!KIDS_SHOES_SIZES[sClean])return;
+            if(!isShoes&&isKids&&!KIDS_SIZES[sClean])return;
             const qn=Math.round(parseFloat(q)||0);
             const label=translateSize(s);
             if(qn>0)allColorSizes[colorKey].sizes[label]=(allColorSizes[colorKey].sizes[label]||0)+qn;
@@ -934,9 +973,10 @@ function renderOnlineList(date){
             ${colorRows.map(([colorKey,{display,qty,sizes}])=>{
               // Sort sizes in chart order, not alphabetically
               const KIDS_ORDER=['1/2','2/3','3/4','4/5','5/6','6/7','7/8','8/9','9/10','10/11'];
-              const KIDS_SHOES_ORDER=['35','36','37','38','39','40','29','30','31','32','33'];
+              const KIDS_SHOES_ORDER=['23','24','25','26','27','28','29','30','31','32','33'];
+              const WOMEN_SHOES_ORDER=['35','36','37','38','39','40'];
               const WOMEN_ORDER=['P','OS','OS+','XXS','XS','S','M','L','XL','XXL','3XL','XXS/XS','XS/S','S/M','M/L','L/XL','XL/2XL','2XL/3XL'];
-              const order=isKidsShoes?KIDS_SHOES_ORDER:isKids?KIDS_ORDER:WOMEN_ORDER;
+              const order=isWomenShoes?WOMEN_SHOES_ORDER:isKidsShoes?KIDS_SHOES_ORDER:isKids?KIDS_ORDER:WOMEN_ORDER;
               const sizeEntries=Object.entries(sizes).sort(([a],[b])=>{
                 const ai=order.indexOf(a), bi=order.indexOf(b);
                 if(ai===-1&&bi===-1)return a.localeCompare(b);
