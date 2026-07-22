@@ -470,22 +470,32 @@ function notify(msg,type='success'){
 function parseFloat2(v){const n=parseFloat(v);return isNaN(n)?0:n;}
 
 function parsePL(workbook){
-  const sheet=workbook.Sheets[workbook.SheetNames[0]];
+  // Try each sheet — prefer the one that has 'item no' in headers
+  let sheet=null;
+  for(const name of workbook.SheetNames){
+    const s=workbook.Sheets[name];
+    const rows=XLSX.utils.sheet_to_json(s,{header:1,defval:null});
+    if(rows.some(r=>r&&r.some(c=>typeof c==='string'&&c.toLowerCase().includes('item no')))){
+      sheet=s; break;
+    }
+  }
+  if(!sheet)sheet=workbook.Sheets[workbook.SheetNames[0]];
+
   const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:null});
   let headerRow=-1;
   for(let i=0;i<rows.length;i++){
     if(rows[i]&&rows[i].some(c=>typeof c==='string'&&c.toLowerCase().includes('item no'))){headerRow=i;break;}
   }
   if(headerRow===-1)return null;
-  const headers=rows[headerRow].map(h=>h?String(h).trim():'');
+  const headers=rows[headerRow].map(h=>h?String(h).split('\n')[0].trim():'');
   const colIdx=name=>headers.findIndex(h=>h.toLowerCase().includes(name.toLowerCase()));
   const itemCol=colIdx('item no'),styleNameCol=colIdx('style name'),colorCol=colIdx('color'),ctnCol=colIdx('CTN'),qtyCol=colIdx('Total Qty');
   if(itemCol===-1||ctnCol===-1)return null;
   const sizeHeaders=[];
   headers.forEach((h,i)=>{
     const clean=h.split('\n')[0].trim();
-    const skip=['style','item no','color','ctn','total','gross','cbm','unit','pic','hs','desc','ship','supplier','israel','factory'];
-    if(clean&&!skip.some(s=>clean.toLowerCase().includes(s))&&i>colorCol)sizeHeaders.push({label:clean,col:i});
+    const skip=['style','item no','color','ctn','total','gross','cbm','unit','pic','hs','desc','ship','supplier','israel','factory','invoice','packing'];
+    if(clean&&!skip.some(s=>clean.toLowerCase().includes(s))&&i>colorCol&&i!==qtyCol)sizeHeaders.push({label:clean,col:i});
   });
   const entries=[];let lastCTN=null,lastStyleName='';
   for(let i=headerRow+1;i<rows.length;i++){
@@ -496,7 +506,12 @@ function parsePL(workbook){
     if(ctn&&ctn!=='CTN'&&!/^\d+$/.test(ctn))lastCTN=ctn;
     if(!item||!lastCTN||item==='nan')continue;
     if(item.toLowerCase()==='item no.'||item.toLowerCase()==='item no')continue;
-    const qty=qtyCol!==-1?parseFloat2(row[qtyCol]):0;
+    // qty: read raw value; if it's a string (formula not evaluated), sum the size columns instead
+    let qty=qtyCol!==-1?parseFloat2(row[qtyCol]):0;
+    if(!qty){
+      // fallback: sum all size columns
+      qty=sizeHeaders.reduce((s,{col})=>s+parseFloat2(row[col]),0);
+    }
     const rawStyle=styleNameCol!==-1&&row[styleNameCol]?String(row[styleNameCol]).trim():'';
     if(rawStyle)lastStyleName=rawStyle;
     const sizes={};
@@ -573,14 +588,16 @@ async function handleFile(e){
   const file=e.target.files[0];if(!file)return;
   try{
     const ab=await file.arrayBuffer();
-    const wb=XLSX.read(ab,{type:'array'});
+    // cellFormula:false + cellNF:false forces SheetJS to read cached values
+    // instead of formula strings (e.g. =SUM(...) becomes the numeric result)
+    const wb=XLSX.read(ab,{type:'array',cellFormula:false,cellNF:false,cellDates:true});
     const entries=parsePL(wb);
     if(!entries||entries.length===0){notify('Cannot read file — please check it is a valid PL','error');return;}
     const id=Date.now().toString();
     await db.ref('shipments/'+id).set({name:file.name.replace(/\.xlsx?$/i,''),date:new Date().toLocaleDateString('en-GB'),entries});
     activeShipment=id;
     notify('✓ Loaded '+entries.length+' rows from '+file.name);
-  }catch(err){notify('Error reading file','error');}
+  }catch(err){console.error(err);notify('Error reading file','error');}
   e.target.value='';
 }
 
